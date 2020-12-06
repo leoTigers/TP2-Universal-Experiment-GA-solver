@@ -136,6 +136,8 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <HeapReserveSize>41943040</HeapReserveSize>
+      <StackReserveSize>41943040</StackReserveSize>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>

@@ -15,12 +15,14 @@
 
 
 // Simulation parameters
-#define POPULATION_SIZE 200
+#define POPULATION_SIZE 400
 #define MUTATION_RATE 0.2
-#define RETAIN_PERCENT 0.05
-#define MAX_ITERATIONS 100000
-#define MIN_MUTATIONS 1
+#define RETAIN_PERCENT 0.2
+#define MAX_ITERATIONS 200000
+#define MIN_MUTATIONS 0
 #define MAX_MUTATIONS 5
+
+#define THREAD_COUNT 1 
 
 // do not change
 #define DIM 7
@@ -106,8 +108,10 @@ unsigned short create_object(int indice) {
             break;
         case 1: //orb
             individual |= (0b10 << 14);
-            tmp = (usage[indice][3] < MAX_REFRESH) ? rand() % 3 : rand() % 2;
-            usage[indice][3] += (tmp == 0b10);
+            // we don't need the red ord
+            tmp = 1 + ((usage[indice][3] < MAX_REFRESH) ? rand() % 2 : rand() % 1);
+            usage[indice][3] += (tmp & 0b10);
+            
             individual |= (tmp << 3);
             break;
         case 2: //reflect
@@ -123,7 +127,7 @@ unsigned short create_object(int indice) {
 void refresh_individual(unsigned short individual[DIM][DIM]) {
     for (int i = 0; i < DIM; ++i) {
         for (int j = 0; j < DIM; ++j) {
-            individual[i][j] = individual[i][j] & 0b1111100011111000;
+            individual[i][j] &= 0b1111100011111000;
         }
     }
 }
@@ -165,7 +169,7 @@ int simulate(int indice, unsigned short population[POPULATION_SIZE][DIM][DIM])
                     dir = (individual[x][y] >> 5) & 0b111;
                     if ((type == 0b000 && uses < 1) || (type == 0b001 && uses < 3) || (type == 0b010 && uses < 5)) {
                         uses++;
-                        individual[x][y] = individual[x][y] & 0b1111100011111111;
+                        individual[x][y] &= 0b1111100011111111;
                         individual[x][y] |= (uses << 8);
                         cur_dir = dir;
                     }
@@ -176,7 +180,7 @@ int simulate(int indice, unsigned short population[POPULATION_SIZE][DIM][DIM])
                         cur_dir = dir;
                         dir = (dir + 1) % 8;
 
-                        individual[x][y] = individual[x][y] & 0b1111111100011111;
+                        individual[x][y] &= 0b1111111100011111;
                         individual[x][y] |= (dir << 5);
                     }
 
@@ -192,7 +196,6 @@ int simulate(int indice, unsigned short population[POPULATION_SIZE][DIM][DIM])
                             break;
                         case 0b10:
                             if (!(individual[x][y] & 0b100)) { //refresh not used
-                                //refresh grid()
                                 refresh_individual(individual);
                                 individual[x][y] |= 0b100;
                             }
@@ -433,9 +436,19 @@ void copy_tab(unsigned short p1[DIM][DIM], unsigned short p2[DIM][DIM]) {
     }
 }
 
+void multi_sim(int start, int end, unsigned short population[POPULATION_SIZE][DIM][DIM], int scores[]) {
+    for(int i = start;i<end;++i){
+        scores[i] = simulate(i, population);
+    }
+}
 
 int main()
 {
+    int population_size;
+    float retain_rate;
+    float mutation_rate;
+    int max_iterations;
+    int min_mutations; 
     unsigned short population[POPULATION_SIZE][DIM][DIM];
     int scores[POPULATION_SIZE] = { 0 };
     int scores_indices[POPULATION_SIZE];
@@ -443,28 +456,36 @@ int main()
     float avg_score;
     unsigned short fittest[DIM][DIM];
     int fit_score=0;
+    bool changed = false;
 
+//Seed:1607275422
     time_t t =time(NULL);
     std::cout << "Seed:" << t << std::endl;
-    srand(t);
+    srand(t)   ;
 
     //threads
-    /*
+    
     std::vector<std::thread> Pool;
-    for (int ii = 0; ii < 8; ii++)
-    {
-        Pool.push_back(std::thread(Infinite_loop_function));
-    }*/
+    
 
     //initial state
     populate(population);
 
     for (int iteration = 0; iteration < MAX_ITERATIONS; ++iteration) {
+        
         // evalute the population
         for (int i = 0; i < POPULATION_SIZE; i++) {
             //repr(population[i]);
             scores[i] = simulate(i, population);
         }
+        /*
+        Pool.clear();
+        for (int i = 0; i < THREAD_COUNT; i++)
+            Pool.push_back(std::thread(multi_sim, (i * POPULATION_SIZE) / THREAD_COUNT, ((i + 1) * POPULATION_SIZE) / THREAD_COUNT, population, scores));
+ 
+        for (int i = 0; i < THREAD_COUNT; i++)
+            Pool[i].join();
+        */
 
         // sort 
         avg_score = 0;
@@ -480,6 +501,7 @@ int main()
         if (scores[0] < fit_score) {
             copy_tab(fittest, population[scores_indices[0]]);
             fit_score = scores[0];
+            changed = true;
             repr(fittest);
         }
 
@@ -502,12 +524,16 @@ int main()
             }
         }
         if (iteration % 1000 == 0) {
-            std::cout << "Iteration : " << iteration << "\tavg_score : " << avg_score << "\tBest : " << scores[0] << std::endl;
+            std::cout << "Iteration : " << iteration << "\tavg_score : " << avg_score << "\tBest : " << scores[0] << "\tEver best : " << fit_score << std::endl;
+            /*if (changed) {
+                //repr(fittest);
+                changed = false;
+            }*/
         }
 
 
     }
-    std::cout << "Best\nFitness : " << scores[0] << std::endl;
+    std::cout << "Best\nFitness : " << fit_score << std::endl;
     repr(fittest);
     
     return 0;
