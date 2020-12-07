@@ -23,16 +23,20 @@
 #define MAX_ITERATIONS 200000
 #define MIN_MUTATIONS 0
 #define MAX_MUTATIONS 5
-
-#define THREAD_COUNT 1 
 */
+
+#define USE_THREADS 1
+#define THREAD_COUNT 20
+
 
 // do not change
 #define DIM 7
 #define MAX_5T_ARROWS 4
+//#define MAX_5T_ARROWS 0
 #define MAX_ROT_ARROWS 3
 #define MAX_INF_ARROWS 1
 #define MAX_REFRESH 1
+#define REFLECT_UNLOCK 1
 
 /* Prototypes */
 unsigned short create_object(int indice, int **usage);
@@ -85,7 +89,7 @@ unsigned short create_object(int indice, int **usage) {
     unsigned short individual = 0;
     int tmp;
 
-    switch (rand() % 3) {
+    switch (rand() % (REFLECT_UNLOCK?3:2)) {
         case 0: //arrow
             individual |= (0b01 << 14);
             do {
@@ -447,12 +451,12 @@ void copy_tab(unsigned short **p1, unsigned short **p2) {
         }
     }
 }
-/*
-void multi_sim(int population_size, int start, int end, unsigned short population[POPULATION_SIZE][DIM][DIM], int scores[]) {
+
+void multi_sim(int population_size, int start, int end, unsigned short ***population, int *scores, int **usage) {
     for(int i = start;i<end;++i){
-        scores[i] = simulate(i, population);
+        scores[i] = simulate(population_size, i, population, usage);
     }
-}*/
+}
 
 void wait_on_enter()
 {
@@ -569,18 +573,23 @@ int main()
     for (int iteration = 0; iteration < max_iterations; ++iteration) {
         
         // evalute the population
-        for (int i = 0; i < population_size; i++) {
-            //repr(population[i]);
-            scores[i] = simulate(population_size, i, population, usage);
+        if (!USE_THREADS) {
+            for (int i = 0; i < population_size; i++) {
+                scores[i] = simulate(population_size, i, population, usage);
+            }
         }
-        /*
-        Pool.clear();
-        for (int i = 0; i < THREAD_COUNT; i++)
-            Pool.push_back(std::thread(multi_sim, (i * POPULATION_SIZE) / THREAD_COUNT, ((i + 1) * POPULATION_SIZE) / THREAD_COUNT, population, scores));
- 
-        for (int i = 0; i < THREAD_COUNT; i++)
-            Pool[i].join();
-        */
+        else {
+            Pool.clear();
+            for (int i = 0; i < THREAD_COUNT; i++)
+                Pool.push_back(std::thread(multi_sim, population_size, (i * population_size) / THREAD_COUNT, ((i + 1) * population_size) / THREAD_COUNT, population, scores, usage));
+
+            for (int i = 0; i < THREAD_COUNT; i++)
+                Pool[i].join();
+        }
+        /**/
+        
+        
+        
 
         // sort 
         avg_score = 0;
