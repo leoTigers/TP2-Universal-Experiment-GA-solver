@@ -11,35 +11,42 @@
 #include <vector>
 #include "console.h"
 #include <thread>
-#include <mutex>
+#include <limits>
 
+#undef max
 
 // Simulation parameters
+/*
 #define POPULATION_SIZE 400
 #define MUTATION_RATE 0.2
 #define RETAIN_PERCENT 0.2
 #define MAX_ITERATIONS 200000
 #define MIN_MUTATIONS 0
 #define MAX_MUTATIONS 5
+*/
 
-#define THREAD_COUNT 1 
+#define USE_THREADS 1
+#define THREAD_COUNT 20
+
 
 // do not change
 #define DIM 7
 #define MAX_5T_ARROWS 4
+//#define MAX_5T_ARROWS 0
 #define MAX_ROT_ARROWS 3
 #define MAX_INF_ARROWS 1
 #define MAX_REFRESH 1
+#define REFLECT_UNLOCK 1
 
 /* Prototypes */
-unsigned short create_object(int indice);
-int simulate(int indice, unsigned short individual[POPULATION_SIZE][DIM][DIM]);
-void populate(unsigned short population[POPULATION_SIZE][DIM][DIM]);
-void repr(unsigned short individual[DIM][DIM]);
-void quicksortIndices(int values[], int indices[]);
-void quicksortIndices(int values[], int indices[], int low, int high);
+unsigned short create_object(int indice, int **usage);
+int simulate(int population_size, int indice, unsigned short ***population, int **usage);
+void populate(int population_size, unsigned short ***population, int **usage);
+void repr(unsigned short **individual);
+void quicksortIndices(int population_size, int values[], int indices[]);
+void quicksortIndices(int population_size, int values[], int indices[], int low, int high);
 void swap(int i, int j, int values[], int indices[]);
-void copy_tab(unsigned short p1[DIM][DIM], unsigned short p2[DIM][DIM]);
+void copy_tab(unsigned short **p1, unsigned short **p2);
 /* End prototypes*/
 
 
@@ -75,14 +82,14 @@ uses (2times => 2bits) [u]
 // TTAAAUUU_DDDttbuu    
 
 
-int usage[POPULATION_SIZE][4] = { {0} };
+//int usage[POPULATION_SIZE][4] = { {0} };
 // [arrows_5t, arrows_inf, arrows_rot, refresh_orb]
 
-unsigned short create_object(int indice) {
+unsigned short create_object(int indice, int **usage) {
     unsigned short individual = 0;
     int tmp;
 
-    switch (rand() % 3) {
+    switch (rand() % (REFLECT_UNLOCK?3:2)) {
         case 0: //arrow
             individual |= (0b01 << 14);
             do {
@@ -124,7 +131,7 @@ unsigned short create_object(int indice) {
 /**
  * set arrows/orb/reflect usage count to 0
 */
-void refresh_individual(unsigned short individual[DIM][DIM]) {
+void refresh_individual(unsigned short **individual) {
     for (int i = 0; i < DIM; ++i) {
         for (int j = 0; j < DIM; ++j) {
             individual[i][j] &= 0b1111100011111000;
@@ -135,7 +142,7 @@ void refresh_individual(unsigned short individual[DIM][DIM]) {
 /**
  * Simulate a game for an individual at indice indice
 */
-int simulate(int indice, unsigned short population[POPULATION_SIZE][DIM][DIM])
+int simulate(int population_size, int indice, unsigned short ***population, int **usage)
 {
     char movements[8][2] = { {-1, -1}, {0, -1}, {1, -1}, {1, 0}, {1, 1}, {0, 1}, {-1, 1}, {-1, 0} };
     char x = -1, y = 6;
@@ -147,7 +154,9 @@ int simulate(int indice, unsigned short population[POPULATION_SIZE][DIM][DIM])
     char type;
     char dir;
 
-    unsigned short individual[DIM][DIM];
+    unsigned short** individual = new unsigned short* [DIM];
+    for (int i = 0; i < DIM; i++)
+        individual[i] = new unsigned short[DIM];
     copy_tab(individual, population[indice]);
 
     refresh_individual(individual);
@@ -221,6 +230,13 @@ int simulate(int indice, unsigned short population[POPULATION_SIZE][DIM][DIM])
             }
         }
     } while (!end);
+
+    // deallocate memory
+    for (int i = 0; i < DIM; i++)
+        delete[] individual[i];
+    delete[] individual;
+
+
     return score;
 
 }
@@ -228,12 +244,12 @@ int simulate(int indice, unsigned short population[POPULATION_SIZE][DIM][DIM])
 /**
  * Creates the initial population with random objects 
  */
-void populate(unsigned short population[POPULATION_SIZE][DIM][DIM]) {
+void populate(int population_size, unsigned short ***population, int **usage) {
 
-    for (int i = 0; i < POPULATION_SIZE; ++i) {
+    for (int i = 0; i < population_size; ++i) {
         for (int x = 0; x < DIM; ++x) {
             for (int y = 0; y < DIM; ++y) {
-                population[i][x][y] = create_object(i);
+                population[i][x][y] = create_object(i, usage);
             }
         }
     }
@@ -243,7 +259,7 @@ void populate(unsigned short population[POPULATION_SIZE][DIM][DIM]) {
  *  Give a visual representation of the grid in the console
  * WINDOWS DEPENDENT !
  */
-void repr(unsigned short individual[DIM][DIM])
+void repr(unsigned short **individual)
 {
     char arrows_dir[8] = { (char)218, '^', (char)191, '>', (char)217, 'v', (char)192, '<' };
     for (int y = 0; y < DIM; ++y) {
@@ -299,11 +315,11 @@ void repr(unsigned short individual[DIM][DIM])
 }
 
 
-void quicksortIndices(int values[], int indices[]) {
+void quicksortIndices(int population_size, int values[], int indices[]) {
     //int indices[] = new int[values.length];
-    for (int i = 0; i < POPULATION_SIZE; i++)
+    for (int i = 0; i < population_size; i++)
         indices[i] = i;
-    quicksortIndices(values, indices, 0, POPULATION_SIZE - 1);
+    quicksortIndices(population_size, values, indices, 0, population_size - 1);
     //return indices;
 }
 
@@ -316,7 +332,7 @@ void quicksortIndices(int values[], int indices[]) {
  * @param         low, high are the **inclusive** bounds of the portion of array
  *                to sort
  */
-void quicksortIndices(int values[], int indices[], int low, int high) {
+void quicksortIndices(int population_size, int values[], int indices[], int low, int high) {
     int l = low;
     int h = high;
     int pivot = values[l];
@@ -332,9 +348,9 @@ void quicksortIndices(int values[], int indices[], int low, int high) {
         }
     }
     if (low < h)
-        quicksortIndices(values, indices, low, h);
+        quicksortIndices(population_size, values, indices, low, h);
     if (high > l)
-        quicksortIndices(values, indices, l, high);
+        quicksortIndices(population_size, values, indices, l, high);
 }
 
 /**
@@ -357,7 +373,7 @@ void swap(int i, int j, int values[], int indices[]) {
  * Breed a new individual with 2 parents, update object limits
  * !! BE CAREFUL, IT DOES NOT CHECK LIMITS WHEN FUSING PARENTS !!
 */
-void breed(int indice, int parent_a, int parent_b, unsigned short population[POPULATION_SIZE][DIM][DIM]) {
+void breed(int population_size, int indice, int parent_a, int parent_b, unsigned short ***population, int **usage) {
     for (int i = 0; i < 4; i++)
         usage[indice][i] = 0;
     for (int i = 0; i < DIM; ++i) {
@@ -396,7 +412,7 @@ void breed(int indice, int parent_a, int parent_b, unsigned short population[POP
 /**
  * Mutate an individual and manages objet limits
 */
-void mutate_individual(int indice, unsigned short population[POPULATION_SIZE][DIM][DIM]) {
+void mutate_individual(int population_size, int indice, unsigned short ***population, int **usage) {
     int x = rand() % DIM;
     int y = rand() % DIM;
     int type;
@@ -422,13 +438,13 @@ void mutate_individual(int indice, unsigned short population[POPULATION_SIZE][DI
         break;
     }
 
-    population[indice][x][y] = create_object(indice);
+    population[indice][x][y] = create_object(indice, usage);
 }
 
 /**
  * Copy the content of tab p1 into tab p2
  */
-void copy_tab(unsigned short p1[DIM][DIM], unsigned short p2[DIM][DIM]) {
+void copy_tab(unsigned short **p1, unsigned short **p2) {
     for (int i = 0; i < DIM; ++i) {
         for (int j = 0; j < DIM; ++j) {
             p1[i][j] = p2[i][j];
@@ -436,25 +452,108 @@ void copy_tab(unsigned short p1[DIM][DIM], unsigned short p2[DIM][DIM]) {
     }
 }
 
-void multi_sim(int start, int end, unsigned short population[POPULATION_SIZE][DIM][DIM], int scores[]) {
+void multi_sim(int population_size, int start, int end, unsigned short ***population, int *scores, int **usage) {
     for(int i = start;i<end;++i){
-        scores[i] = simulate(i, population);
+        scores[i] = simulate(population_size, i, population, usage);
     }
+}
+
+void wait_on_enter()
+{
+    std::string dummy; 
+    std::cin.clear(); 
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    std::cout << "Enter to continue..." << std::endl;
+    std::getline(std::cin, dummy);
 }
 
 int main()
 {
-    int population_size;
-    float retain_rate;
-    float mutation_rate;
-    int max_iterations;
-    int min_mutations; 
-    unsigned short population[POPULATION_SIZE][DIM][DIM];
-    int scores[POPULATION_SIZE] = { 0 };
-    int scores_indices[POPULATION_SIZE];
+    std::cout << "This program is very bad and won't check if you're entering bad values." << std::endl;
+    std::cout << "Therefore please don't try to break something, it WILL break." << std::endl;
+    std::cout << "Source code available at https://github.com/leoTigers/TP2-Universal-Experiment-GA-solver" << std::endl;
+
+    int population_size = 50;
+    float retain_rate = 0.2f;
+    float mutation_rate = 0.2f;
+    int max_iterations = 100000;
+    int min_mutations = 0; 
+    int max_mutations = 5;
+
+    char a;
+
+    std::cout << "Enter the population size:";
+    std::cin >> population_size;
+    if (population_size < 1) {
+        std::cout << "YOU TRIED" << std::endl;
+        wait_on_enter();
+        return -1;
+    }
+
+    std::cout << "Enter the retain rate (the amount of individuals not dying each round, between 0 and 1): ";
+    std::cin >> retain_rate;
+    if (retain_rate < 0 || retain_rate>1) {
+        std::cout << "YOU TRIED" << std::endl;
+        wait_on_enter();
+        return -1;
+    }
+
+    std::cout << "Enter the mutation rate (the chance of a mutation occuring, between 0 and 1): ";
+    std::cin >> mutation_rate;
+    if (mutation_rate < 0 || mutation_rate>1) {
+        std::cout << "YOU TRIED" << std::endl;
+        wait_on_enter();
+        return -1;
+    }
+
+    std::cout << "Enter the number of iterations: ";
+    std::cin >> max_iterations;
+    if (max_iterations < 0) {
+        std::cout << "YOU TRIED" << std::endl;
+        wait_on_enter();
+        return -1;
+    }
+
+
+    std::cout << "Enter the minimum amount of mutations that CAN occur (still depends on mutation rate): ";
+    std::cin >> min_mutations;
+    if (min_mutations < 0) {
+        std::cout << "YOU TRIED" << std::endl;
+        wait_on_enter();
+        return -1;
+    }
+
+    std::cout << "Enter the maximum amount of mutations that CAN occur (still depends on mutation rate): ";
+    std::cin >> max_mutations;
+    if (max_mutations < 0 || max_mutations < min_mutations) {
+        std::cout << "YOU TRIED" << std::endl;
+        wait_on_enter();
+        return -1;
+    }
+    
+    unsigned short ***population = new unsigned short**[population_size];
+    for (int i = 0; i < population_size; i++)
+    {
+        population[i] = new unsigned short* [DIM];
+        for (int j = 0; j < DIM; j++)
+            population[i][j] = new unsigned short[DIM];
+    }
+
+    int *scores = new int[population_size];
+    int *scores_indices = new int[population_size];
+
+    int **usage = new int*[population_size];
+    for (int i = 0; i < population_size; ++i) {
+        usage[i] = new int[4];
+        for (int j = 0; j < 4; ++j)
+            usage[i][j] = 0;
+    }
 
     float avg_score;
-    unsigned short fittest[DIM][DIM];
+    unsigned short** fittest = new unsigned short* [DIM];
+    for (int i = 0; i < DIM; ++i) 
+        fittest[i] = new unsigned short[DIM];
+    
     int fit_score=0;
     bool changed = false;
 
@@ -469,57 +568,64 @@ int main()
     
 
     //initial state
-    populate(population);
+    populate(population_size, population, usage);
 
-    for (int iteration = 0; iteration < MAX_ITERATIONS; ++iteration) {
+    for (int iteration = 0; iteration < max_iterations; ++iteration) {
         
         // evalute the population
-        for (int i = 0; i < POPULATION_SIZE; i++) {
-            //repr(population[i]);
-            scores[i] = simulate(i, population);
+        if (!USE_THREADS) {
+            for (int i = 0; i < population_size; i++) {
+                scores[i] = simulate(population_size, i, population, usage);
+            }
         }
-        /*
-        Pool.clear();
-        for (int i = 0; i < THREAD_COUNT; i++)
-            Pool.push_back(std::thread(multi_sim, (i * POPULATION_SIZE) / THREAD_COUNT, ((i + 1) * POPULATION_SIZE) / THREAD_COUNT, population, scores));
- 
-        for (int i = 0; i < THREAD_COUNT; i++)
-            Pool[i].join();
-        */
+        else {
+            Pool.clear();
+            for (int i = 0; i < THREAD_COUNT; i++)
+                Pool.push_back(std::thread(multi_sim, population_size, (i * population_size) / THREAD_COUNT, ((i + 1) * population_size) / THREAD_COUNT, population, scores, usage));
+
+            for (int i = 0; i < THREAD_COUNT; i++)
+                Pool[i].join();
+        }
+        /**/
+        
+        
+        
 
         // sort 
         avg_score = 0;
 
-        for (int i = 0; i < POPULATION_SIZE; ++i) {
+        for (int i = 0; i < population_size; ++i) {
             scores_indices[i] = i;
             avg_score += scores[i];
         }
-        avg_score /= (float)POPULATION_SIZE;
-        quicksortIndices(scores, scores_indices);
+        avg_score /= (float)population_size;
+        quicksortIndices(population_size, scores, scores_indices);
 
         //save the fittest and his score
         if (scores[0] < fit_score) {
             copy_tab(fittest, population[scores_indices[0]]);
             fit_score = scores[0];
             changed = true;
+            std::cout << "Score:" << fit_score << std::endl;
             repr(fittest);
         }
 
-        for (int i = 0; i < POPULATION_SIZE; ++i) {
+        for (int i = 0; i < population_size; ++i) {
             //replace with RETAIN_PERCENT
-            if (i > RETAIN_PERCENT * POPULATION_SIZE) {
+            if (i > retain_rate * population_size) {
                 int parent_a, parent_b;
                 parent_a = scores_indices[0];//rand() % (int)(RETAIN_PERCENT * POPULATION_SIZE)];
                 parent_b = scores_indices[0];// rand() % (int)(RETAIN_PERCENT * POPULATION_SIZE)];
                 //new individual with NOT random parents BECAUSE ITS ANNOYING
-                breed(scores_indices[i], parent_a, parent_b, population);
+                
+                breed(population_size, scores_indices[i], parent_a, parent_b, population, usage);
             }
 
             // mutate
-            int mutation_count = rand() % (MAX_MUTATIONS - MIN_MUTATIONS) + MIN_MUTATIONS;
+            int mutation_count = rand() % (max_mutations - min_mutations) + min_mutations;
             for (int j = 0; j < mutation_count; ++j) {
-                if (rand() / (float)RAND_MAX < MUTATION_RATE) {
-                    mutate_individual(i, population);
+                if (rand() / (float)RAND_MAX < mutation_rate) {
+                    mutate_individual(population_size, i, population, usage);
                 }
             }
         }
@@ -533,8 +639,11 @@ int main()
 
 
     }
-    std::cout << "Best\nFitness : " << fit_score << std::endl;
+    std::cout << "Best fitness : " << fit_score << std::endl;
     repr(fittest);
-    
+
+    std::cout << "Seed:" << t << std::endl;
+    wait_on_enter();
+
     return 0;
 }
