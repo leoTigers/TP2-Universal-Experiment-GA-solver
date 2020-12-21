@@ -17,6 +17,12 @@ namespace console
 		VERBOSE = b;
 	}
 
+	void gotoxy(int x, int y) {
+		HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+		COORD pos = { x, y };
+		SetConsoleCursorPosition(hConsole, pos);
+	}
+
 	void setColor(int foreground, int background)
 	{
 		HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
