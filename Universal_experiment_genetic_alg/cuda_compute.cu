@@ -108,7 +108,7 @@ void ce(int population_size, Grid* population) {
     cudaMemcpy(d_population, population, sizeof(Grid) * population_size, cudaMemcpyHostToDevice);
     cudaMemcpy(d_population_size, &population_size, sizeof(int), cudaMemcpyHostToDevice);
 
-    cuda_eval<<<100, 256>>>(d_population_size, d_population);
+    cuda_eval<<<200, 64>>>(d_population_size, d_population);
     cudaDeviceSynchronize();
     cudaMemcpy(population, d_population, sizeof(Grid) * population_size, cudaMemcpyDeviceToHost);
 

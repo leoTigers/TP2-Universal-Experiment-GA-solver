@@ -598,9 +598,9 @@ int main(int argc, char* argv)
     params.population_size = 10000;
     params.max_iterations = 200000;
     params.min_mutations = 0;
-    params.max_mutations = 6;
-    params.retain_rate = 0.8f;
-    params.mutation_rate = .1f;
+    params.max_mutations = 10;
+    params.retain_rate = 0.2f;
+    params.mutation_rate = .2f;
 
     Grid *population = new Grid[params.population_size];
     Grid fittest{};
@@ -615,7 +615,7 @@ int main(int argc, char* argv)
     std::cout << "Seed:" << start << std::endl;
     srand(start);
 
-    std::cout << sizeof(Grid) * params.population_size<< "o"<<std::endl;
+    //std::cout << sizeof(Grid) * params.population_size<< "o"<<std::endl;
     //wait_on_enter();
 
     //initial state
@@ -671,7 +671,7 @@ int main(int argc, char* argv)
         }
         // TODO : REWORK TIME DEPENDENT
         dt = time(NULL);
-        if (dt-t > 2) {
+        if (dt-t >= 2) {
             status(params.population_size, population, iteration, params.max_iterations, fittest, scores, start, t);
             t = dt;
             /*if (changed) {
