@@ -67,7 +67,7 @@ __global__ void cuda_eval(int* population_size, Grid* population) {
                         for (int i = 0; i < DIM; ++i) {
                             for (int j = 0; j < DIM; ++j) {
                                 population[indice].cases[i][j].current_uses = 0;
-                                population[indice].cases[i][j].c_dir = population[indice].cases[i][j].dir;
+                                //population[indice].cases[i][j].c_dir = population[indice].cases[i][j].dir;
                             }
                         }
                         population[indice].cases[x][y].current_uses = 1;
@@ -96,23 +96,23 @@ __global__ void cuda_eval(int* population_size, Grid* population) {
     population[indice].changed = false;
 }
 
-void ce(int population_size, Grid* population) {
+void ce(int population_size, Grid* population, Grid* d_population) {
 
-    Grid* d_population;
+    //Grid* d_population;
     //cudaMallocManaged(&res, sizeof(Grid));
     int* d_population_size;
 
-    cudaMalloc((void**)&d_population, population_size * sizeof(Grid));
+    //cudaMalloc((void**)&d_population, population_size * sizeof(Grid));
     cudaMalloc((void**)&d_population_size, sizeof(int));
 
     cudaMemcpy(d_population, population, sizeof(Grid) * population_size, cudaMemcpyHostToDevice);
     cudaMemcpy(d_population_size, &population_size, sizeof(int), cudaMemcpyHostToDevice);
 
-    cuda_eval<<<200, 64>>>(d_population_size, d_population);
+    cuda_eval<<<100, 32>>>(d_population_size, d_population);
     cudaDeviceSynchronize();
     cudaMemcpy(population, d_population, sizeof(Grid) * population_size, cudaMemcpyDeviceToHost);
 
-    cudaFree(d_population);
+    //cudaFree(d_population);
     cudaFree(d_population_size);
 }
 

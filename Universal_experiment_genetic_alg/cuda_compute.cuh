@@ -5,4 +5,4 @@
 #include <stdio.h>
 #include "structs.h"
 
-void ce(int population_size, Grid* population);
+void ce(int population_size, Grid* population, Grid* d_population);

@@ -32,10 +32,10 @@ typedef struct {
 
 typedef struct {
     Case cases[DIM][DIM];
-    char limits[4]; // limits for 5t, rot, inf arrows and refresh
+    char limits[4]; // limits for 5t, inf, rot arrows and refresh
     int changed;
     int score;
-    // int min_lifetime;
+    int min_lifetime;
 } Grid;
 
 typedef struct {
@@ -46,4 +46,5 @@ typedef struct {
     int min_lifetime;
     float retain_rate;
     float mutation_rate;
+    float kill_rate;
 } Parameters;
