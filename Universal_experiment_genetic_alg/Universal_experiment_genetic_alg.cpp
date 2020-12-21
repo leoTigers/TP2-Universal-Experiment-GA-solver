@@ -11,11 +11,15 @@
 #include "console.h"
 #include <thread>
 
+#include "cuda_compute.cuh"
+#include "structs.h"
+
 #ifdef max
 #undef max
 #endif // removes the max macro defined in some ide
 
-// CPU thread management
+// DEPRECATED
+// CPU thread management 
 #define USE_THREADS 0
 #define THREAD_COUNT 5
 
@@ -29,50 +33,7 @@
 #define MAX_REFRESH 1
 #define REFLECT_UNLOCK 1
 
-/* Structures */
-enum Object_type {
-    ARROW = 0,
-    ORB = 1,
-    REFLECT = 2
-};
 
-enum Arrow_type {
-    ONE_USE = 0,
-    THREE_USES = 1,
-    FIVE_USES = 2,
-    INFINITE_USES = 3,
-    ROTATING = 4
-};
-
-enum Orb_type {
-    NORMAL = 0,
-    REFRESH = 1
-};
-
-typedef struct {
-    char type; // 0 Arrow, 1 Orb, 2 Reflect
-    char o_type; // Object type : Arrows 0:1T, 1:3T, 2:5T, 3:inf, 4:rot ;; orb: 0:normal, 1:refresh
-    char dir; // 0 if not type==0, [0;7[ else, starting top-left and going clockwise
-    char current_uses;
-} Case;
-
-typedef struct {
-    Case cases[DIM][DIM];
-    char limits[4]; // limits for 5t, rot, inf arrows and refresh
-    boolean changed;
-    int score;
-    // int min_lifetime;
-} Grid;
-
-typedef struct {
-    int population_size;
-    int max_iterations;
-    int min_mutations;
-    int max_mutations;
-    int min_lifetime;
-    float retain_rate;
-    float mutation_rate;
-} Parameters;
 /* End structures */
 
 /* Prototypes */
@@ -176,10 +137,7 @@ void evaluate(int population_size, Grid* population, int* scores, int* scores_in
     /**/
 
 }
-/*
-__global__ void cuda_eval() {
 
-}*/
 
 Parameters parse_parameters(int argc, char* argv) {
     Parameters params{};
@@ -385,8 +343,11 @@ void breed(int population_size, int indice, int parent_a, int parent_b, Grid* po
 */
 void refresh_individual(Grid &individual) {
     for (int i = 0; i < DIM; ++i)
-        for (int j = 0; j < DIM; ++j)
+        for (int j = 0; j < DIM; ++j) {
             individual.cases[i][j].current_uses = 0;
+            individual.cases[i][j].c_dir = individual.cases[i][j].dir;
+        }
+            
 }
 
 /**
@@ -409,9 +370,8 @@ int simulate(int population_size, int indice, Grid* population)
     char type;
     char dir;
 
-    Grid individual{};
-    copy_tab(individual, population[indice]);
-    refresh_individual(individual);
+    //copy_tab(individual, population[indice]);
+    refresh_individual(population[indice]);
 
     do {
         //repr(population[indice]);
@@ -424,13 +384,13 @@ int simulate(int population_size, int indice, Grid* population)
             end = true;
         }
         else {
-            switch (individual.cases[x][y].type) {
+            switch (population[indice].cases[x][y].type) {
                 case Object_type::ARROW: 
-                    type = individual.cases[x][y].o_type;
-                    uses = individual.cases[x][y].current_uses;
-                    dir = individual.cases[x][y].dir;
+                    type = population[indice].cases[x][y].o_type;
+                    uses = population[indice].cases[x][y].current_uses;
+                    dir = population[indice].cases[x][y].c_dir;
                     if ((type == Arrow_type::ONE_USE && uses < 1) || (type == Arrow_type::THREE_USES && uses < 3) || (type == Arrow_type::FIVE_USES && uses < 5)) {
-                        individual.cases[x][y].current_uses++;
+                        population[indice].cases[x][y].current_uses++;
                         cur_dir = dir;
                     }
                     else if (type == Arrow_type::INFINITE_USES) { 
@@ -438,25 +398,25 @@ int simulate(int population_size, int indice, Grid* population)
                     } 
                     else if (type == Arrow_type::ROTATING) {
                         cur_dir = dir;
-                        individual.cases[x][y].dir = (dir + 1) & 7;
+                        population[indice].cases[x][y].c_dir = (dir + 1) & 7;
                     }
                     break;
                 case Object_type::ORB: 
-                    switch (individual.cases[x][y].o_type)
+                    switch (population[indice].cases[x][y].o_type)
                     {
                         case Orb_type::NORMAL: 
                             score--;
                             break;
                         case Orb_type::REFRESH:
-                            if (individual.cases[x][y].current_uses == 0) { //refresh not used
-                                refresh_individual(individual);
-                                individual.cases[x][y].current_uses = 1;
+                            if (population[indice].cases[x][y].current_uses == 0) { //refresh not used
+                                refresh_individual(population[indice]);
+                                population[indice].cases[x][y].current_uses = 1;
                             }
                             break;
                     }
                     break;
                 case Object_type::REFLECT: //reflect
-                    uses = individual.cases[x][y].current_uses;
+                    uses = population[indice].cases[x][y].current_uses;
                     if (uses < 2) {
                         uses++;
                         if (cur_dir & 1)
@@ -466,7 +426,7 @@ int simulate(int population_size, int indice, Grid* population)
                         else
                             cur_dir -= 2;
 
-                        individual.cases[x][y].current_uses++;
+                        population[indice].cases[x][y].current_uses++;
                     }
                     break;
             }
@@ -635,11 +595,11 @@ int main(int argc, char* argv)
     float mutation_rate;
     */
     Parameters params{};// {100, 50000, 1, 6, .2, .3};//= parse_parameters(argc, argv);
-    params.population_size = 500;
+    params.population_size = 10000;
     params.max_iterations = 200000;
     params.min_mutations = 0;
     params.max_mutations = 6;
-    params.retain_rate = 0.2f;
+    params.retain_rate = 0.8f;
     params.mutation_rate = .1f;
 
     Grid *population = new Grid[params.population_size];
@@ -655,18 +615,24 @@ int main(int argc, char* argv)
     std::cout << "Seed:" << start << std::endl;
     srand(start);
 
+    std::cout << sizeof(Grid) * params.population_size<< "o"<<std::endl;
+    //wait_on_enter();
+
     //initial state
     create_population(params.population_size, population);
 
     for (int iteration = 0; iteration < params.max_iterations; ++iteration) {
         // evalute the population
-        evaluate(params.population_size, population, scores, scores_indices);
- 
+        //evaluate(params.population_size, population, scores, scores_indices);
+
+        ce(params.population_size, population);
+
         // sort 
         //avg_score = 0;
         
         for (int i = 0; i < params.population_size; ++i) {
             scores_indices[i] = i;
+            scores[i] = population[i].score;
         //    avg_score += scores[i];
         }
         //avg_score /= (float)params.population_size;
