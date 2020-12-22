@@ -262,7 +262,7 @@ __global__ void cuda_mutate(Parameters* d_params, Grid* d_population, curandStat
         return;
     }
 
-    unsigned int mut_count = curand(&localState) % (d_params->max_mutations-d_params->min_mutations) + d_params->min_mutations;
+    unsigned int mut_count = powf(curand_uniform(&localState),3) * (d_params->max_mutations-d_params->min_mutations) + d_params->min_mutations;
 
     for (int i = 0; i < mut_count; ++i) {
         // pick a random position
