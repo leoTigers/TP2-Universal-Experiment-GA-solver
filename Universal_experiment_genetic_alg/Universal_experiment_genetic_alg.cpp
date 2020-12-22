@@ -19,33 +19,59 @@
 #undef max
 #endif // removes the max macro defined in some ide
 
-
-
-
-/* End structures */
-
 /* Prototypes */
 void create_population(int population_size, Grid* population);
 void create_individual(Grid& individual);
 void create_object(Case& object, char limits[]);
-void evaluate(int population_size, Grid* population, int* scores, int* scores_indices);
-Parameters parse_parameters(int argc, char* argv);
+Parameters parse_parameters(int argc, char* argv[]);
 void repr(Grid& individual);
 void copy_tab(Grid &g1, Grid &g2);
-void breed(int population_size, int indice, int parent_a, int parent_b, Grid* population);
-void refresh_individual(Grid& individual);
-int simulate(int population_size, int indice, Grid* population);
-void mutate_individual(int population_size, Grid& individual);
 
-//void quicksortIndices(int population_size, int values[], int indices[]);
-//void quicksortIndices(int population_size, int values[], int indices[], int low, int high);
-//void swap(int i, int j, int values[], int indices[]);
 void wait_on_enter();
-
-void multi_sim(int population_size, int start, int end, Grid* population, int* scores);
-
 /* End prototypes*/
 
+
+int stoi(const std::string& str, int* p_value, std::size_t* pos = nullptr, int base = 10) {
+    // wrapping std::stoi because it may throw an exception
+    try {
+        *p_value = std::stoi(str, pos, base);
+        return 0;
+    }
+    catch (const std::invalid_argument& ia) {
+        std::cerr << "Invalid argument: " << ia.what() << std::endl;
+        return -1;
+    }
+    catch (const std::out_of_range& oor) {
+        std::cerr << "Out of Range error: " << oor.what() << std::endl;
+        return -2;
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "Undefined error: " << e.what() << std::endl;
+        return -3;
+    }
+}
+
+int stof(const std::string& str, float* p_value, std::size_t* pos = nullptr, int base = 10) {
+    // wrapping std::stof because it may throw an exception
+    try {
+        *p_value = std::stof(str, pos);
+        return 0;
+    }
+    catch (const std::invalid_argument& ia) {
+        std::cerr << "Invalid argument: " << ia.what() << std::endl;
+        return -1;
+    }
+    catch (const std::out_of_range& oor) {
+        std::cerr << "Out of Range error: " << oor.what() << std::endl;
+        return -2;
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "Undefined error: " << e.what() << std::endl;
+        return -3;
+    }
+}
 
 /**
  * Creates the initial population with random objects
@@ -107,64 +133,171 @@ void create_object(Case& object, char limits[]) {
     }
 }
 
-void evaluate(int population_size, Grid* population, int* scores, int* scores_indices) {
-   
-    for (int i = 0; i < population_size; i++) {
-        //repr(population[i]);
-        scores[i] = simulate(population_size, i, population);
-    }
-    
+static void show_usage(std::string name)
+{
+    std::cerr << "Usage: " << name << " <option(s)>\n"
+        << "Options:\n"
+        << "\t-h,--help\t\tShow this help message\n"
+        << "\t-p,--population POPULATION_SIZE\tSpecify the size of the population\n"
+        << "\t-i,--iterations ITERATION_COUNT\tSpecify the number of iterations\n"
+        << "\t-m,--min-mutation MIN_MUTATIONS\tSpecify the minimum of mutations that WILL occur\n"
+        << "\t-M,--max-mutation MAX_MUTATIONS\tSpecify the maxiimum of mutations that CAN occur\n"
+        << "\t-rr,--retain RETAIN_RATE\tSpecify the retain rate (0.2 means top 20% will survive at the end of a round)\n"
+        << "\t-mr,--mutation MUTATION_RATE\tSpecify the mutation rate (between 0 and 1)\n"
+        << "\n\n"
+        << "Symbols:\n"
+        << "\t"<<(char)218 << " ^ " << (char)191 << " > " << (char)217 << " v " << (char)192 << " <" <<" : one use arrows\n";
+    console::setColor(6, 0);
+    std::cout << "\t" << (char)218 << " ^ " << (char)191 << " > " << (char)217 << " v " << (char)192 << " <";
+    console::setColor(15, 0);
+    std::cout <<" : three uses arrows\n";
+    console::setColor(11, 0);
+    std::cout << "\t" << (char)218 << " ^ " << (char)191 << " > " << (char)217 << " v " << (char)192 << " <";
+    console::setColor(15, 0);
+    std::cout << " : five uses arrows\n";
+    console::setColor(0, 15);
+    std::cout << "\t" << (char)218 << " ^ " << (char)191 << " > " << (char)217 << " v " << (char)192 << " <";
+    console::setColor(15, 0);
+    std::cout << " : infinite uses arrows\n";
+    console::setColor(13, 7);
+    std::cout << "\t" << (char)218 << " ^ " << (char)191 << " > " << (char)217 << " v " << (char)192 << " <";
+    console::setColor(15, 0);
+    std::cout << " : rotating arrows\n";
+
+    console::setColor(12, 0);
+    std::cout << "\t" << "O";
+    console::setColor(15, 0);
+    std::cout << " : normal orb\n";
+    console::setColor(5, 0);
+    std::cout << "\t" << "O";
+    console::setColor(15, 0);
+    std::cout << " : refresh orb\n";
+
+    std::cout << "\tR : reflect" << std::endl;
 }
 
+Parameters parse_parameters(int argc, char* argv[]) {
+    Parameters params{0};
 
-Parameters parse_parameters(int argc, char* argv) {
-    Parameters params{};
-    if (argc < 2)
-    {
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "-h" || arg == "--help") {
+            show_usage(argv[0]);
+            wait_on_enter();
+            exit(1);
+        }
+        else if (arg == "-p" || arg == "--population") {
+            if (i + 1 < argc) {
+                stoi(argv[i++], &params.population_size);
+            }
+            else {
+                std::cerr << "--population option requires one argument." << std::endl;
+                wait_on_enter();
+                exit(1);
+            }
+        }
+        else if (arg == "-i" || arg == "--iterations") {
+            if (i + 1 < argc) {
+                stoi(argv[i++], &params.max_iterations);
+            }
+            else {
+                std::cerr << "--iterations option requires one argument." << std::endl;
+                wait_on_enter();
+                exit(1);
+            }
+        }
+        else if (arg == "-m" || arg == "--min-mutation") {
+            if (i + 1 < argc) {
+                stoi(argv[i++], &params.min_mutations);
+            }
+            else {
+                std::cerr << "--min-mutation option requires one argument." << std::endl;
+                wait_on_enter();
+                exit(1);
+            }
+        }
+        else if (arg == "-M" || arg == "--max-mutation") {
+            if (i + 1 < argc) {
+                stoi(argv[i++], &params.max_mutations);
+            }
+            else {
+                std::cerr << "--max-mutation option requires one argument." << std::endl;
+                wait_on_enter();
+                exit(1);
+            }
+        }
+        else if (arg == "-rr" || arg == "--retain") {
+            if (i + 1 < argc) {
+                stof(argv[i++], &params.retain_rate);
+            }
+            else {
+                std::cerr << "--retain option requires one argument." << std::endl;
+                wait_on_enter();
+                exit(1);
+            }
+        }
+        else if (arg == "-mr" || arg == "--mutation") {
+            if (i + 1 < argc) {
+                stof(argv[i++], &params.mutation_rate);
+            }
+            else {
+                std::cerr << "--mutation option requires one argument." << std::endl;
+                wait_on_enter();
+                exit(1);
+            }
+        }
+    }
+
+    if (params.population_size == 0) {
         std::cout << "Enter the population size:";
         std::cin >> params.population_size;
         if (params.population_size < 1) {
-            std::cout << "YOU TRIED" << std::endl;
+            std::cout << "Size must be greater than 0" << std::endl;
             wait_on_enter();
             exit(-1);
         }
-
+    }
+    if (params.retain_rate == 0) {
         std::cout << "Enter the retain rate (the amount of individuals not dying each round, between 0 and 1): ";
         std::cin >> params.retain_rate;
         if (params.retain_rate < 0 || params.retain_rate>1) {
-            std::cout << "YOU TRIED" << std::endl;
+            std::cout << "Retain rate must be between 0 and 1" << std::endl;
             wait_on_enter();
             exit(-1);
         }
-
+    }
+    if (params.mutation_rate == 0) {
         std::cout << "Enter the mutation rate (the chance of a mutation occuring, between 0 and 1): ";
         std::cin >> params.mutation_rate;
         if (params.mutation_rate < 0 || params.mutation_rate>1) {
-            std::cout << "YOU TRIED" << std::endl;
+            std::cout << "Mutation rate must be between 0 and 1" << std::endl;
             wait_on_enter();
             exit(-1);
         }
-
+    }
+    if (params.max_iterations == 0) {
         std::cout << "Enter the number of iterations: ";
         std::cin >> params.max_iterations;
         if (params.max_iterations < 0) {
-            std::cout << "YOU TRIED" << std::endl;
+            std::cout << "Iteration count must be greater than 0" << std::endl;
             wait_on_enter();
             exit(-1);
         }
-
-        std::cout << "Enter the minimum amount of mutations that CAN occur (still depends on mutation rate): ";
+    }
+    if (params.min_mutations == 0) {
+        std::cout << "Enter the minimum amount of mutations that WILL occur : ";
         std::cin >> params.min_mutations;
         if (params.min_mutations < 0) {
-            std::cout << "YOU TRIED" << std::endl;
+            std::cout << "Minimum mutation can't be negative" << std::endl;
             wait_on_enter();
             exit(-1);
         }
-
-        std::cout << "Enter the maximum amount of mutations that CAN occur (still depends on mutation rate): ";
+    }
+    if (params.max_mutations == 0) {
+        std::cout << "Enter the maximum amount of mutations that CAN occur (depends on mutation rate): ";
         std::cin >> params.max_mutations;
         if (params.max_mutations < 0 || params.max_mutations < params.min_mutations) {
-            std::cout << "YOU TRIED" << std::endl;
+            std::cout << "Maximum mutation can't be negative nor smaller than minimum mutation" << std::endl;
             wait_on_enter();
             exit(-1);
         }
@@ -244,312 +377,6 @@ void copy_tab(Grid &g1, Grid &g2) {
     g1.score = g2.score;
 }
 
-/**
- * Breed a new individual with 2 parents, update object limits
- * 
-*/
-void breed(int population_size, int indice, int parent_a, int parent_b, Grid* population) {
-    // Reset limits for new individual
-    for (int i = 0; i < 4; i++)
-        population[indice].limits[i] = 0;
-
-    int crosspoint = rand() % 49; // the case at which point we'll take values from parent_b instead of parent_a
-    for (int i = 0; i < DIM; ++i) {
-        for (int j = 0; j < DIM; ++j) {
-            Case tmp;
-            //if(rand()&1){ // addition random
-            if (i * DIM + j < crosspoint) { 
-                // Normal addition by crosspoint
-                tmp = population[parent_a].cases[i][j];
-                switch (tmp.type) {
-                case Object_type::ARROW: 
-                    if (tmp.o_type > 1)
-                        population[indice].limits[tmp.o_type - 2]++;
-                    break;
-                case Object_type::ORB: 
-                    if (tmp.o_type == 1)
-                        population[indice].limits[3]++;
-                    break;
-                }/*
-                tmp = population[parent_b].cases[i][j];
-                boolean valid_insertion = true;
-                switch (tmp.type) {
-                case Object_type::ARROW:
-                    switch (tmp.o_type)
-                    {
-                    case Arrow_type::FIVE_USES:
-                        if (population[indice].limits[0] >= MAX_5T_ARROWS)
-                            valid_insertion = false;
-                        break;
-                    case Arrow_type::INFINITE_USES:
-                        if (population[indice].limits[1] >= MAX_INF_ARROWS)
-                            valid_insertion = false;
-                        break;
-                    case Arrow_type::ROTATING:
-                        if (population[indice].limits[2] >= MAX_ROT_ARROWS)
-                            valid_insertion = false;
-                        break;
-                    default:
-                        break;
-                    }
-                    if (!valid_insertion)
-                        create_object(tmp, population[indice].limits);
-                    else {
-                        if (tmp.o_type > 1)
-                            population[indice].limits[tmp.o_type - 2]++;
-                    }
-                    break;
-                case Object_type::ORB:
-                    if (tmp.o_type == Orb_type::REFRESH) {
-                        if (population[indice].limits[3] >= MAX_REFRESH)
-                            create_object(tmp, population[indice].limits);
-                        else {
-                            population[indice].limits[3]++;
-                        }
-                    }
-                    break;
-                }*/
-            }
-            else { // Addition with limit check
-                tmp = population[parent_b].cases[i][j];
-                boolean valid_insertion = true;
-                switch (tmp.type) {
-                case Object_type::ARROW: 
-                    switch (tmp.o_type)
-                    {
-                        case Arrow_type::FIVE_USES:
-                            if (population[indice].limits[0] >= MAX_5T_ARROWS)
-                                valid_insertion = false;
-                            break;
-                        case Arrow_type::INFINITE_USES:
-                            if (population[indice].limits[1] >= MAX_INF_ARROWS)
-                                valid_insertion = false;
-                            break;
-                        case Arrow_type::ROTATING:
-                            if (population[indice].limits[2] >= MAX_ROT_ARROWS)
-                                valid_insertion = false;
-                            break;
-                        default:
-                            break;
-                    }
-                    if (!valid_insertion)
-                        create_object(tmp, population[indice].limits);
-                    else {
-                        if (tmp.o_type > 1)
-                            population[indice].limits[tmp.o_type - 2]++;
-                    }
-                    break;
-                case Object_type::ORB: 
-                    if (tmp.o_type == Orb_type::REFRESH) {
-                        if (population[indice].limits[3] >= MAX_REFRESH)
-                            create_object(tmp, population[indice].limits);
-                        else {
-                            population[indice].limits[3]++;
-                        }
-                    }
-                    break;
-                }
-            }
-            population[indice].cases[i][j] = tmp;
-        }
-    }
-    population[indice].changed = true;
-
-    population[indice].min_lifetime = 0;
-}
-
-/**
- * set arrows/orb/reflect usage count to 0
-*/
-void refresh_individual(Grid &individual) {
-    for (int i = 0; i < DIM; ++i)
-        for (int j = 0; j < DIM; ++j) {
-            individual.cases[i][j].current_uses = 0;
-            }
-}
-
-/**
- * Simulate a game for an individual at indice indice
-*/
-int simulate(int population_size, int indice, Grid* population)
-{
-    //if grid hasen't changed
-    if (!population[indice].changed)
-        return population[indice].score;
-
-    char movements[8][2] = { {-1, -1}, {0, -1}, {1, -1}, {1, 0}, {1, 1}, {0, 1}, {-1, 1}, {-1, 0} };
-    // starting pos
-    char x = -1, y = 6;
-    char cur_dir = 3;
-
-    bool end = false;
-    int score = 0;
-    char uses;
-    char type;
-    char dir;
-
-    //copy_tab(individual, population[indice]);
-    refresh_individual(population[indice]); 
-    for (int i = 0; i < DIM; ++i)
-        for (int j = 0; j < DIM; ++j) 
-            population[indice].cases[i][j].c_dir = population[indice].cases[i][j].dir;
-
-
-    do {
-        //repr(population[indice]);
-        //move
-        x += movements[cur_dir][0];
-        y += movements[cur_dir][1];
-
-        //check exit cond
-        if (x < 0 || x >= DIM || y < 0 || y >= DIM) {
-            end = true;
-        }
-        else {
-            switch (population[indice].cases[x][y].type) {
-                case Object_type::ARROW: 
-                    type = population[indice].cases[x][y].o_type;
-                    uses = population[indice].cases[x][y].current_uses;
-                    dir = population[indice].cases[x][y].c_dir;
-                    if ((type == Arrow_type::ONE_USE && uses < 1) || (type == Arrow_type::THREE_USES && uses < 3) || (type == Arrow_type::FIVE_USES && uses < 5)) {
-                        population[indice].cases[x][y].current_uses++;
-                        cur_dir = dir;
-                    }
-                    else if (type == Arrow_type::INFINITE_USES) { 
-                        cur_dir = dir;
-                    } 
-                    else if (type == Arrow_type::ROTATING) {
-                        cur_dir = dir;
-                        population[indice].cases[x][y].c_dir = (dir + 1) & 7;
-                    }
-                    break;
-                case Object_type::ORB: 
-                    switch (population[indice].cases[x][y].o_type)
-                    {
-                        case Orb_type::NORMAL: 
-                            score--;
-                            break;
-                        case Orb_type::REFRESH:
-                            if (population[indice].cases[x][y].current_uses == 0) { //refresh not used
-                                refresh_individual(population[indice]);
-                                population[indice].cases[x][y].current_uses = 1;
-                            }
-                            break;
-                    }
-                    break;
-                case Object_type::REFLECT: //reflect
-                    uses = population[indice].cases[x][y].current_uses;
-                    if (uses < 2) {
-                        uses++;
-                        if (cur_dir & 1)
-                            cur_dir = (cur_dir + 4) % 8;
-                        else if (cur_dir == 0)
-                            cur_dir = 6;
-                        else
-                            cur_dir -= 2;
-
-                        population[indice].cases[x][y].current_uses++;
-                    }
-                    break;
-            }
-        }
-    } while (!end);
-    population[indice].score = score;
-    population[indice].changed = false;
-
-    return score;
-}
-
-/*
-void quicksortIndices(int population_size, int values[], int indices[]) {
-    for (int i = 0; i < population_size; i++)
-        indices[i] = i;
-    quicksortIndices(population_size, values, indices, 0, population_size - 1);
-}*/
-
-/**
- * @brief Sorts the provided values between two indices while applying the same
- *        transformations to the array of indices
- *
- * @param values  the values to sort
- * @param indices the indices to sort according to the corresponding values
- * @param         low, high are the **inclusive** bounds of the portion of array
- *                to sort
- *//*
-void quicksortIndices(int population_size, int values[], int indices[], int low, int high) {
-    int l = low;
-    int h = high;
-    int pivot = values[l];
-    while (l <= h) {
-        if (values[l] < pivot)
-            l++;
-        else if (values[h] > pivot)
-            h--;
-        else {
-            swap(l, h, values, indices);
-            l++;
-            h--;
-        }
-    }
-    if (low < h)
-        quicksortIndices(population_size, values, indices, low, h);
-    if (high > l)
-        quicksortIndices(population_size, values, indices, l, high);
-}*/
-
-/**
- * @brief Swaps the elements of the given arrays at the provided positions
- *
- * @param         i, j the indices of the elements to swap
- * @param values  the array floats whose values are to be swapped
- * @param indices the array of ints whose values are to be swapped
- *//*
-void swap(int i, int j, int values[], int indices[]) {
-    int tempValue = values[i];
-    int tempIndice = indices[i];
-    values[i] = values[j];
-    indices[i] = indices[j];
-    values[j] = tempValue;
-    indices[j] = tempIndice;
-}*/
-
-
-/**
- * Mutate an individual and manages objet limits
-*/
-void mutate_individual(int population_size, Grid &individual) {
-    // pick a random position
-    int x = rand() % DIM;
-    int y = rand() % DIM;
-
-    int type;
-
-    // update limits
-    switch (individual.cases[x][y].type) {
-    case Object_type::ARROW: 
-        type = individual.cases[x][y].o_type;
-        switch (type) {
-            case Arrow_type::FIVE_USES:
-                individual.limits[0]--;
-                break;
-            case Arrow_type::INFINITE_USES:
-                individual.limits[1]--;
-                break;
-            case Arrow_type::ROTATING:
-                individual.limits[2]--;
-                break;
-        }
-        break;
-    case Object_type::ORB:
-        if(individual.cases[x][y].o_type == Orb_type::REFRESH)
-            individual.limits[3]--;
-        break;
-    }
-    
-    // create new object
-    create_object(individual.cases[x][y], individual.limits);
-    individual.changed = true;
-}
 
 void status(int population_size, Grid* population, 
     int iteration, int max_iter, Grid &fittest, 
@@ -578,13 +405,6 @@ void status(int population_size, Grid* population,
     repr(fittest);
 }
 
-//evaluate(params.population_size, population, scores, scores_indices);
- 
-void multi_sim(int population_size, int start, int end, Grid *population, int *scores) {
-    for(int i = start;i<end;++i){
-        scores[i] = simulate(population_size, i, population);
-    }
-}
 
 /**
  * @brief Pause until user input
@@ -592,45 +412,45 @@ void multi_sim(int population_size, int start, int end, Grid *population, int *s
 void wait_on_enter()
 {
     std::string dummy; 
-    std::cin.clear(); 
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     std::cout << "Enter to continue..." << std::endl;
     std::getline(std::cin, dummy);
 }
 
-int main(int argc, char* argv)
+int main(int argc, char* argv[])
 {
-    std::cout << "This program is made with little research and no prior knowledge on this subject. Please manage your expectations." << std::endl; 
-    std::cout << "Please don't try to break something, it WILL break." << std::endl;
-    std::cout << "Source code available at https://github.com/leoTigers/TP2-Universal-Experiment-GA-solver" << std::endl;
+    system("cls");
+    console::setColor(0xc, 0);
+    std::cout <<
+        "                                                              __,,,,_\n"
+        "                                               _ __..-;''`--/'/ /.',-`-.\n"
+        "                                           (`/' ` |  \\ \\ \\\\ / / / / .-'/`,_\n"
+        "                                          /'`\\ \\   |  \\ | \\| // // / -.,/_,'-,\n"
+        "                                         /<7' ;  \\ \\  | ; ||/ /| | \\/    |`-/,/-.,_,/')\n"
+        "                                        /  _.-, `,-\\,__|  _-| / \\ \\/|_/  |    '-/.;.\\'\n"
+        "                                        `-`  f/ ;      / __/ \\__ `/ |__/ |\n"
+        "                                             `-'      |  -| =|\\_  \\  |-' |\n"
+        "                                                   __/   /_..-' `  ),'  //\n"
+        "                                               fL ((__.-'((___..-'' \\__.'" << std::endl << std::endl;
+    console::setColor(15, 0);
+    std::cout << "(Art source : http://www.ascii-art.de/ascii/t/tiger.txt )" << std::endl;
+    std::cout << "\nThis program is made with little research and no prior knowledge on this subject. Please manage your expectations." << std::endl; 
+    std::cout << "And please don't try to break something as it WILL break." << std::endl;
+    std::cout << "\nSource code available at https://github.com/leoTigers/TP2-Universal-Experiment-GA-solver" << std::endl;
     std::cout << "Feel free to experiment and maybe improve this program / fix the mistakes I made :D" << std::endl;
-    std::cout << "This program can run with parameters, to learn more about symbols and parameters, run with -h" << std::endl;
+    std::cout << "\nThis program can run with parameters, to learn more about symbols and parameters, run with -h" << std::endl;
     
-
+    if(argc < 2) 
+        wait_on_enter();
 
     // Simulation parameters
-    /*
-    int population_size;
-    int max_iterations;
-    int min_mutations;
-    int max_mutations;
-    int min_lifetime;
-    float retain_rate;
-    float mutation_rate;
-    */
-    Parameters params{};// {100, 50000, 1, 6, .2, .3};//= parse_parameters(argc, argv);
-    params.population_size = 1000;
-    params.max_iterations = 2000000;
-    params.min_mutations = 0;
-    params.max_mutations = 6;
-    params.retain_rate = .1f;
-    params.mutation_rate = .3f;
-    params.kill_rate = 0.05f;
+    Parameters params{ 0 };
+    params = parse_parameters(argc, argv);
 
     Grid* population = new Grid[params.population_size];
 
     Grid fittest{};
     
+    // Best solution found yet (score 526)
     Grid bs{};
     bs.cases[0][0] = Case{ 0, 1, 3 };
     bs.cases[1][0] = Case{ 2 };
@@ -711,7 +531,7 @@ int main(int argc, char* argv)
     cudaMalloc((void**)&d_params, sizeof(Parameters));
     cudaMalloc((void**)&d_scores, sizeof(int)* params.population_size);
     cudaMalloc((void**)&d_scores_indices, sizeof(int)* params.population_size);
-    cudaMalloc((void**)&c_state, sizeof(curandState)* TOTAL_THREADS);
+    cudaMalloc((void**)&c_state, sizeof(curandState)* (params.population_size/THREADS + 1));
     cudaMalloc((void**)&d_fittest, sizeof(Grid));
 
     time_t start = time(NULL);
@@ -725,83 +545,24 @@ int main(int argc, char* argv)
 
     cudaMemcpy(d_population, population, sizeof(Grid)* params.population_size, cudaMemcpyHostToDevice);
     cudaMemcpy(d_params, &params, sizeof(Parameters), cudaMemcpyHostToDevice);
-    setup(c_state);
-    //std::cout << simulate(params.population_size, 0, population);
+    setup(c_state, &params);
 
     time_t t = time(NULL);
     time_t dt;
 
     for (int iteration = 0; iteration < params.max_iterations; ++iteration) {
         // evalute the population
-        //setup(c_state);
         cuda_run(params, d_params, population, d_population,
             scores, d_scores, scores_indices, d_scores_indices,
             &fittest, d_fittest, c_state);
 
-        // sort         
-        /*for (int i = 0; i < params.population_size; ++i) {
-            scores_indices[i] = i;
-            scores[i] = population[i].score;
-        }
-        quicksortIndices(params.population_size, scores, scores_indices);
-
-        //save the fittest and his score
-        if (scores[0] < fittest.score) {
-            copy_tab(fittest, population[scores_indices[0]]);
-        }*/
-
-        //for (int i = 0; i < params.population_size; ++i) {
-        //    //replace with RETAIN_PERCENT
-        //    if (i > params.retain_rate * params.population_size) {
-        //        /*if (i > (1 - params.kill_rate) * params.population_size)
-        //        {
-        //            create_individual(population[scores_indices[i]]);
-        //        }*/
-        //        //else {
-        //        int parent_a, parent_b;
-        //        parent_a = scores_indices[rand() % (int)(params.retain_rate * params.population_size)];
-        //        parent_b = scores_indices[rand() % (int)(params.retain_rate * params.population_size)];
-        //        breed(params.population_size, scores_indices[i], parent_a, parent_b, population);
-        //        //}
-        //        //copy_tab(population[scores_indices[i]], population[scores_indices[0]]);
-        //        //population[scores_indices[i]].changed = true;
-        //    }
-        //    // mutate
-        //    // TODO : REWORK
-
-        //    // forced mutations
-        //    if (i > 0) {
-        //        for (int j = 0; j < params.min_mutations; ++j) {
-        //            mutate_individual(params.population_size, population[scores_indices[i]]);
-        //            population[scores_indices[i]].changed = true;
-        //        }
-        //        for (int j = 0; j < params.max_mutations - params.min_mutations; ++j) {
-        //            if (rand() / (float)RAND_MAX < params.mutation_rate) {
-        //                mutate_individual(params.population_size, population[scores_indices[i]]);
-        //                population[scores_indices[i]].changed = true;
-        //            }
-        //        }
-        //    }
-        //}
 
         dt = time(NULL);
         if (dt - t >= 2) {
             status(params.population_size, population, iteration, params.max_iterations, fittest, scores, start, t);
             t = dt;
-            /*if (changed) {
-                //repr(fittest);
-                changed = false;
-            }*/
+           
         }
-        //std::cout << "ITER ======================" << iteration << std::endl;
-        /*for (int _ = 0; _ < params.population_size; ++_)
-        {
-            std::cout << _ << std::endl;
-            repr(population[_]);
-            simulate(params.population_size, _, population);
-        }*/
-
-
     }
 
     std::cout << "Best fitness : " << -fittest.score << std::endl;

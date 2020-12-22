@@ -51,8 +51,6 @@ typedef struct {
     int max_iterations;
     int min_mutations;
     int max_mutations;
-    int min_lifetime;
     float retain_rate;
     float mutation_rate;
-    float kill_rate;
 } Parameters;

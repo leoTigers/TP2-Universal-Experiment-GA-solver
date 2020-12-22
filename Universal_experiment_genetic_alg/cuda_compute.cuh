@@ -19,7 +19,7 @@ void cuda_run(Parameters params, Parameters* d_params, Grid* population, Grid* d
     int* scores, int* d_scores, int* scores_indices, int* d_scores_indices,
     Grid* fittest, Grid* d_fittest, curandState* state);
 
-void setup(curandState* state);
+void setup(curandState* state, Parameters* d_params);
 
 void quicksortIndices(int population_size, int values[], int indices[]);
 void quicksortIndices(int population_size, int values[], int indices[], int low, int high);

@@ -9,7 +9,6 @@ __global__ void cuda_eval(Parameters* d_params, Grid* population, int* scores) {
     if (indice >= d_params->population_size)
         return;
     //if grid hasen't changed
-    //printf("%d\n", indice);
     /*if (!population[indice].changed)
     {
         scores[indice] = population[indice].score;
@@ -133,7 +132,7 @@ __global__ void cuda_breed(Parameters *d_params, Grid* d_population, int* d_scor
     for (int i = 0; i < 4; i++)
         d_population[d_scores_indices[indice]].limits[i] = 0;
 
-    int crosspoint = 49; curand(&localState) % 50; // the case at which point we'll take values from parent_b instead of parent_a
+    int crosspoint = curand(&localState) % 50; // the case at which point we'll take values from parent_b instead of parent_a
     for (int i = 0; i < DIM; ++i) {
         for (int j = 0; j < DIM; ++j) {
             Case tmp;
@@ -420,14 +419,14 @@ __global__ void setup_kernel(curandState* state, int* d_val) {
     curand_init(d_val[id], id, 0, &state[id]);
 }
 
-void setup(curandState* state) {
+void setup(curandState* state, Parameters *params) {
     int  *values, *d_values;
-    values = new int[TOTAL_THREADS];
-    cudaMalloc((void**)&d_values, sizeof(int) * TOTAL_THREADS);
-    for (int i = 0; i < TOTAL_THREADS; ++i)
+    values = new int[(params->population_size / THREADS + 1)];
+    cudaMalloc((void**)&d_values, sizeof(int) * (params->population_size / THREADS + 1));
+    for (int i = 0; i < (params->population_size / THREADS + 1); ++i)
         values[i] = rand();
-    cudaMemcpy(d_values, values, sizeof(int) * TOTAL_THREADS, cudaMemcpyHostToDevice);
-    setup_kernel<<<BLOCKS, THREADS>>>(state, d_values);
+    cudaMemcpy(d_values, values, sizeof(int) * (params->population_size / THREADS + 1), cudaMemcpyHostToDevice);
+    setup_kernel<<<(params->population_size / THREADS + 1), THREADS>>>(state, d_values);
     cudaFree(d_values);
     delete values;
 }
@@ -437,7 +436,7 @@ void cuda_run(Parameters params, Parameters* d_params, Grid* population, Grid* d
     Grid *fittest, Grid *d_fittest, curandState* state) {
     
     // evaluate the population
-    cuda_eval<<<BLOCKS, THREADS>>>(d_params, d_population, d_scores);
+    cuda_eval<<<(params.population_size / THREADS + 1), THREADS>>>(d_params, d_population, d_scores);
     cudaDeviceSynchronize();
 
     // get back the scores
@@ -461,11 +460,11 @@ void cuda_run(Parameters params, Parameters* d_params, Grid* population, Grid* d
     cudaMemcpy(d_scores_indices, scores_indices, sizeof(int) * params.population_size, cudaMemcpyHostToDevice);
 
     // breed new elements
-    cuda_breed<<<BLOCKS, THREADS>>>(d_params, d_population, d_scores, d_scores_indices, state);
+    cuda_breed<<<(params.population_size / THREADS + 1), THREADS>>>(d_params, d_population, d_scores, d_scores_indices, state);
     cudaDeviceSynchronize(); 
 
     // mutate some elements
-    cuda_mutate<<<BLOCKS, THREADS>>>(d_params, d_population, state);
+    cuda_mutate<<<(params.population_size / THREADS + 1), THREADS>>>(d_params, d_population, state);
     cudaError a = cudaDeviceSynchronize();
     //cudaMemcpy(population, d_population, sizeof(Grid) * params.population_size, cudaMemcpyDeviceToHost);
 
