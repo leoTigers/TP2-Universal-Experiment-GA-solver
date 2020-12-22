@@ -256,7 +256,15 @@ __global__ void cuda_mutate(Parameters* d_params, Grid* d_population, curandStat
 
     curandState localState = state[d_scores_indices[indice]];
 
-    for (int i = 0; i < d_params->min_mutations; ++i) {
+    if (curand_uniform(&localState) > d_params->mutation_rate)
+    {
+        state[d_scores_indices[indice]] = localState;
+        return;
+    }
+
+    unsigned int mut_count = curand(&localState) % (d_params->max_mutations-d_params->min_mutations) + d_params->min_mutations;
+
+    for (int i = 0; i < mut_count; ++i) {
         // pick a random position
         int x = curand(&localState) % DIM;
         int y = curand(&localState) % DIM;
@@ -310,61 +318,60 @@ __global__ void cuda_mutate(Parameters* d_params, Grid* d_population, curandStat
         d_population[d_scores_indices[indice]].changed = true;
     }
     
-    for (int i = 0; i < d_params->max_mutations-d_params->min_mutations; ++i) {
-        if (curand_uniform(&localState) < d_params->mutation_rate) {
-            // pick a random position
-            int x = curand(&localState) % DIM;
-            int y = curand(&localState) % DIM;
-           
-            int type;
-
-            // update limits
-            switch (d_population[d_scores_indices[indice]].cases[x][y].type) {
-            case Object_type::ARROW:
-                type = d_population[d_scores_indices[indice]].cases[x][y].o_type;
-                switch (type) {
-                case Arrow_type::FIVE_USES:
-                    d_population[d_scores_indices[indice]].limits[0]--;
-                    break;
-                case Arrow_type::INFINITE_USES:
-                    d_population[d_scores_indices[indice]].limits[1]--;
-                    break;
-                case Arrow_type::ROTATING:
-                    d_population[d_scores_indices[indice]].limits[2]--;
-                    break;
-                }
-                break;
-            case Object_type::ORB:
-                if (d_population[d_scores_indices[indice]].cases[x][y].o_type == Orb_type::REFRESH)
-                    d_population[d_scores_indices[indice]].limits[3]--;
-                break;
-            }
-
-            // create new object
-            type = curand(&localState) % (REFLECT_UNLOCK ? 3 : 2);
-            d_population[d_scores_indices[indice]].cases[x][y].type = type;
-            switch (type) {
-            case Object_type::ARROW: //arrow
-                // pick an arrow type within grid object limits
-                do {
-                    d_population[d_scores_indices[indice]].cases[x][y].o_type = curand(&localState) % 5;
-                } while ((d_population[d_scores_indices[indice]].cases[x][y].o_type == Arrow_type::FIVE_USES && d_population[d_scores_indices[indice]].limits[0] == MAX_5T_ARROWS) ||
-                    (d_population[d_scores_indices[indice]].cases[x][y].o_type == Arrow_type::INFINITE_USES && d_population[d_scores_indices[indice]].limits[1] == MAX_INF_ARROWS) ||
-                    (d_population[d_scores_indices[indice]].cases[x][y].o_type == Arrow_type::ROTATING && d_population[d_scores_indices[indice]].limits[2] == MAX_ROT_ARROWS));
-
-                if (d_population[d_scores_indices[indice]].cases[x][y].o_type > 1)
-                    d_population[d_scores_indices[indice]].limits[d_population[d_scores_indices[indice]].cases[x][y].o_type - 2]++;
-                d_population[d_scores_indices[indice]].cases[x][y].dir = curand(&localState) & 7;
-                break;
-            case Object_type::ORB: //orb
-                // orb can be normal or refresh
-                d_population[d_scores_indices[indice]].cases[x][y].o_type = (d_population[d_scores_indices[indice]].limits[3] < MAX_REFRESH) ? curand(&localState) & 1 : 0;
-                d_population[d_scores_indices[indice]].limits[3] += (d_population[d_scores_indices[indice]].cases[x][y].o_type & 1);
-                break;
-            }
-            d_population[d_scores_indices[indice]].changed = true;
-        }
-    }
+    //for (int i = 0; i < d_params->max_mutations-d_params->min_mutations; ++i) {
+    //    if (curand_uniform(&localState) < d_params->mutation_rate) {
+    //        // pick a random position
+    //        int x = curand(&localState) % DIM;
+    //        int y = curand(&localState) % DIM;
+    //       
+    //        int type;
+    //        // update limits
+    //        switch (d_population[d_scores_indices[indice]].cases[x][y].type) {
+    //        case Object_type::ARROW:
+    //            type = d_population[d_scores_indices[indice]].cases[x][y].o_type;
+    //            switch (type) {
+    //            case Arrow_type::FIVE_USES:
+    //                d_population[d_scores_indices[indice]].limits[0]--;
+    //                break;
+    //            case Arrow_type::INFINITE_USES:
+    //                d_population[d_scores_indices[indice]].limits[1]--;
+    //                break;
+    //            case Arrow_type::ROTATING:
+    //                d_population[d_scores_indices[indice]].limits[2]--;
+    //                break;
+    //            }
+    //            break;
+    //        case Object_type::ORB:
+    //            if (d_population[d_scores_indices[indice]].cases[x][y].o_type == Orb_type::REFRESH)
+    //                d_population[d_scores_indices[indice]].limits[3]--;
+    //            break;
+    //        }
+    //
+    //        // create new object
+    //        type = curand(&localState) % (REFLECT_UNLOCK ? 3 : 2);
+    //        d_population[d_scores_indices[indice]].cases[x][y].type = type;
+    //        switch (type) {
+    //        case Object_type::ARROW: //arrow
+    //            // pick an arrow type within grid object limits
+    //            do {
+    //                d_population[d_scores_indices[indice]].cases[x][y].o_type = curand(&localState) % 5;
+    //            } while ((d_population[d_scores_indices[indice]].cases[x][y].o_type == Arrow_type::FIVE_USES && d_population[d_scores_indices[indice]].limits[0] == MAX_5T_ARROWS) ||
+    //                (d_population[d_scores_indices[indice]].cases[x][y].o_type == Arrow_type::INFINITE_USES && d_population[d_scores_indices[indice]].limits[1] == MAX_INF_ARROWS) ||
+    //                (d_population[d_scores_indices[indice]].cases[x][y].o_type == Arrow_type::ROTATING && d_population[d_scores_indices[indice]].limits[2] == MAX_ROT_ARROWS));
+    //
+    //            if (d_population[d_scores_indices[indice]].cases[x][y].o_type > 1)
+    //                d_population[d_scores_indices[indice]].limits[d_population[d_scores_indices[indice]].cases[x][y].o_type - 2]++;
+    //            d_population[d_scores_indices[indice]].cases[x][y].dir = curand(&localState) & 7;
+    //            break;
+    //        case Object_type::ORB: //orb
+    //            // orb can be normal or refresh
+    //            d_population[d_scores_indices[indice]].cases[x][y].o_type = (d_population[d_scores_indices[indice]].limits[3] < MAX_REFRESH) ? curand(&localState) & 1 : 0;
+    //            d_population[d_scores_indices[indice]].limits[3] += (d_population[d_scores_indices[indice]].cases[x][y].o_type & 1);
+    //            break;
+    //        }
+    //        d_population[d_scores_indices[indice]].changed = true;
+    //    }
+    //}
     state[d_scores_indices[indice]] = localState;
 }
 
