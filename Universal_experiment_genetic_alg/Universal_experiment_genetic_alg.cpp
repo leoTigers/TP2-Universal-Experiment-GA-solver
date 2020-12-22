@@ -177,7 +177,7 @@ static void show_usage(std::string name)
 }
 
 Parameters parse_parameters(int argc, char* argv[]) {
-    Parameters params{0};
+    Parameters params{-1, -1, -1, -1, -1, -1};
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -188,7 +188,7 @@ Parameters parse_parameters(int argc, char* argv[]) {
         }
         else if (arg == "-p" || arg == "--population") {
             if (i + 1 < argc) {
-                stoi(argv[i++], &params.population_size);
+                stoi(argv[++i], &params.population_size);
             }
             else {
                 std::cerr << "--population option requires one argument." << std::endl;
@@ -198,7 +198,7 @@ Parameters parse_parameters(int argc, char* argv[]) {
         }
         else if (arg == "-i" || arg == "--iterations") {
             if (i + 1 < argc) {
-                stoi(argv[i++], &params.max_iterations);
+                stoi(argv[++i], &params.max_iterations);
             }
             else {
                 std::cerr << "--iterations option requires one argument." << std::endl;
@@ -208,7 +208,7 @@ Parameters parse_parameters(int argc, char* argv[]) {
         }
         else if (arg == "-m" || arg == "--min-mutation") {
             if (i + 1 < argc) {
-                stoi(argv[i++], &params.min_mutations);
+                stoi(argv[++i], &params.min_mutations);
             }
             else {
                 std::cerr << "--min-mutation option requires one argument." << std::endl;
@@ -218,7 +218,7 @@ Parameters parse_parameters(int argc, char* argv[]) {
         }
         else if (arg == "-M" || arg == "--max-mutation") {
             if (i + 1 < argc) {
-                stoi(argv[i++], &params.max_mutations);
+                stoi(argv[++i], &params.max_mutations);
             }
             else {
                 std::cerr << "--max-mutation option requires one argument." << std::endl;
@@ -228,7 +228,7 @@ Parameters parse_parameters(int argc, char* argv[]) {
         }
         else if (arg == "-rr" || arg == "--retain") {
             if (i + 1 < argc) {
-                stof(argv[i++], &params.retain_rate);
+                stof(argv[++i], &params.retain_rate);
             }
             else {
                 std::cerr << "--retain option requires one argument." << std::endl;
@@ -238,7 +238,7 @@ Parameters parse_parameters(int argc, char* argv[]) {
         }
         else if (arg == "-mr" || arg == "--mutation") {
             if (i + 1 < argc) {
-                stof(argv[i++], &params.mutation_rate);
+                stof(argv[++i], &params.mutation_rate);
             }
             else {
                 std::cerr << "--mutation option requires one argument." << std::endl;
@@ -248,7 +248,7 @@ Parameters parse_parameters(int argc, char* argv[]) {
         }
     }
 
-    if (params.population_size == 0) {
+    if (params.population_size < 0) {
         std::cout << "Enter the population size:";
         std::cin >> params.population_size;
         if (params.population_size < 1) {
@@ -257,7 +257,7 @@ Parameters parse_parameters(int argc, char* argv[]) {
             exit(-1);
         }
     }
-    if (params.retain_rate == 0) {
+    if (params.retain_rate < 0) {
         std::cout << "Enter the retain rate (the amount of individuals not dying each round, between 0 and 1): ";
         std::cin >> params.retain_rate;
         if (params.retain_rate < 0 || params.retain_rate>1) {
@@ -266,7 +266,7 @@ Parameters parse_parameters(int argc, char* argv[]) {
             exit(-1);
         }
     }
-    if (params.mutation_rate == 0) {
+    if (params.mutation_rate < 0) {
         std::cout << "Enter the mutation rate (the chance of a mutation occuring, between 0 and 1): ";
         std::cin >> params.mutation_rate;
         if (params.mutation_rate < 0 || params.mutation_rate>1) {
@@ -275,7 +275,7 @@ Parameters parse_parameters(int argc, char* argv[]) {
             exit(-1);
         }
     }
-    if (params.max_iterations == 0) {
+    if (params.max_iterations < 0) {
         std::cout << "Enter the number of iterations: ";
         std::cin >> params.max_iterations;
         if (params.max_iterations < 0) {
@@ -284,7 +284,7 @@ Parameters parse_parameters(int argc, char* argv[]) {
             exit(-1);
         }
     }
-    if (params.min_mutations == 0) {
+    if (params.min_mutations < 0) {
         std::cout << "Enter the minimum amount of mutations that WILL occur : ";
         std::cin >> params.min_mutations;
         if (params.min_mutations < 0) {
@@ -293,7 +293,7 @@ Parameters parse_parameters(int argc, char* argv[]) {
             exit(-1);
         }
     }
-    if (params.max_mutations == 0) {
+    if (params.max_mutations < 0) {
         std::cout << "Enter the maximum amount of mutations that CAN occur (depends on mutation rate): ";
         std::cin >> params.max_mutations;
         if (params.max_mutations < 0 || params.max_mutations < params.min_mutations) {
@@ -525,7 +525,6 @@ int main(int argc, char* argv[])
     int* d_scores_indices;
     curandState *c_state;
     Grid* d_fittest;
-
 
     cudaMalloc((void**)&d_population, params.population_size * sizeof(Grid));
     cudaMalloc((void**)&d_params, sizeof(Parameters));

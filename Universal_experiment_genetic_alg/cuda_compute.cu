@@ -125,8 +125,11 @@ __global__ void cuda_breed(Parameters *d_params, Grid* d_population, int* d_scor
 
     int parent_a, parent_b;
     int smod = d_params->retain_rate * d_params->population_size;
-    parent_a = d_scores_indices[curand(&localState) % smod];
-    parent_b = d_scores_indices[curand(&localState) % smod];
+    int p_a, p_b;
+    p_a = (int)(powf(curand_uniform(&localState), 5)*smod);
+    p_b = (int)(powf(curand_uniform(&localState), 5)*smod);
+    parent_a = d_scores_indices[p_a];
+    parent_b = d_scores_indices[p_b];
 
     // Reset limits for new individual
     for (int i = 0; i < 4; i++)
