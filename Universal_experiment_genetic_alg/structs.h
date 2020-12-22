@@ -1,6 +1,14 @@
 #pragma once
 
+// GAME CONSTANTS
 #define DIM 7
+
+// Simulation parameters, shouldn't change assuming you unlocked everything (3 prestiges)
+#define MAX_5T_ARROWS 4
+#define MAX_ROT_ARROWS 3
+#define MAX_INF_ARROWS 1
+#define MAX_REFRESH 1
+#define REFLECT_UNLOCK 1
 
 /* Structures */
 enum Object_type {

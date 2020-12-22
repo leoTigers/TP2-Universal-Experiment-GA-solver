@@ -1,13 +1,21 @@
 #include "cuda_compute.cuh"
 
-__global__ void cuda_eval(int* population_size, Grid* population) {
+void repr(Grid& individual);
+
+
+__global__ void cuda_eval(Parameters* d_params, Grid* population, int* scores) {
     
     int indice = (blockIdx.x * blockDim.x) + threadIdx.x;
-    if (indice >= *population_size)
+    if (indice >= d_params->population_size)
         return;
     //if grid hasen't changed
-    if (!population[indice].changed)
+    //printf("%d\n", indice);
+    /*if (!population[indice].changed)
+    {
+        scores[indice] = population[indice].score;
         return;
+    }*/
+
 
     char movements[8][2] = { {-1, -1}, {0, -1}, {1, -1}, {1, 0}, {1, 1}, {0, 1}, {-1, 1}, {-1, 0} };
     // starting pos
@@ -19,6 +27,7 @@ __global__ void cuda_eval(int* population_size, Grid* population) {
     char uses;
     char type;
     char dir;
+    int cc = 0;
 
     //copy_tab(individual, population[indice]);
     for (int i = 0; i < DIM; ++i){
@@ -29,6 +38,11 @@ __global__ void cuda_eval(int* population_size, Grid* population) {
     }
 
     do {
+        cc++;
+        if (cc > 50000) {
+            scores[indice] = 50000;
+            return;
+        }
         //repr(population[indice]);
         //move
         x += movements[cur_dir][0];
@@ -94,25 +108,368 @@ __global__ void cuda_eval(int* population_size, Grid* population) {
     } while (!end);
     population[indice].score = score;
     population[indice].changed = false;
+    scores[indice] = score;
+    //printf("%d\t%d\n", indice, score);
 }
 
-void ce(int population_size, Grid* population, Grid* d_population) {
+__global__ void cuda_breed(Parameters *d_params, Grid* d_population, int* d_scores, 
+    int* d_scores_indices, curandState* state) {
 
-    //Grid* d_population;
-    //cudaMallocManaged(&res, sizeof(Grid));
-    int* d_population_size;
+    int indice = (blockIdx.x * blockDim.x) + threadIdx.x;
+    if (indice >= d_params->population_size)
+        return;
 
-    //cudaMalloc((void**)&d_population, population_size * sizeof(Grid));
-    cudaMalloc((void**)&d_population_size, sizeof(int));
+    if (indice < d_params->retain_rate * d_params->population_size)
+        return;
 
-    cudaMemcpy(d_population, population, sizeof(Grid) * population_size, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_population_size, &population_size, sizeof(int), cudaMemcpyHostToDevice);
+    curandState localState = state[indice];
 
-    cuda_eval<<<100, 32>>>(d_population_size, d_population);
+    int parent_a, parent_b;
+    int smod = d_params->retain_rate * d_params->population_size;
+    parent_a = d_scores_indices[curand(&localState) % smod];
+    parent_b = d_scores_indices[curand(&localState) % smod];
+
+    // Reset limits for new individual
+    for (int i = 0; i < 4; i++)
+        d_population[d_scores_indices[indice]].limits[i] = 0;
+
+    int crosspoint = 49; curand(&localState) % 50; // the case at which point we'll take values from parent_b instead of parent_a
+    for (int i = 0; i < DIM; ++i) {
+        for (int j = 0; j < DIM; ++j) {
+            Case tmp;
+            if (i * DIM + j < crosspoint) {
+                // Normal addition by crosspoint
+                tmp = d_population[parent_a].cases[i][j];
+                switch (tmp.type) {
+                case Object_type::ARROW:
+                    if (tmp.o_type > 1)
+                        d_population[d_scores_indices[indice]].limits[tmp.o_type - 2]++;
+                    break;
+                case Object_type::ORB:
+                    if (tmp.o_type == Orb_type::REFRESH)
+                        d_population[d_scores_indices[indice]].limits[3]++;
+                    break;
+                }
+            }
+            else { // Addition with limit check
+                tmp = d_population[parent_b].cases[i][j];
+                int valid_insertion = true;
+                switch (tmp.type) {
+                case Object_type::ARROW:
+                    switch (tmp.o_type)
+                    {
+                    case Arrow_type::FIVE_USES:
+                        if (d_population[d_scores_indices[indice]].limits[0] >= MAX_5T_ARROWS)
+                            valid_insertion = false;
+                        break;
+                    case Arrow_type::INFINITE_USES:
+                        if (d_population[d_scores_indices[indice]].limits[1] >= MAX_INF_ARROWS)
+                            valid_insertion = false;
+                        break;
+                    case Arrow_type::ROTATING:
+                        if (d_population[d_scores_indices[indice]].limits[2] >= MAX_ROT_ARROWS)
+                            valid_insertion = false;
+                        break;
+                    default:
+                        break;
+                    }
+                    if (!valid_insertion) {
+                        char type = curand(&localState) % (REFLECT_UNLOCK ? 3 : 2);
+                        tmp.type = type;
+                        switch (type) {
+                        case Object_type::ARROW: //arrow
+                            // pick an arrow type within grid object limits
+                            do {
+                                tmp.o_type = curand(&localState) % 5;
+                            } while ((tmp.o_type == Arrow_type::FIVE_USES && d_population[d_scores_indices[indice]].limits[0] >= MAX_5T_ARROWS) ||
+                                (tmp.o_type == Arrow_type::INFINITE_USES && d_population[d_scores_indices[indice]].limits[1] >= MAX_INF_ARROWS) ||
+                                (tmp.o_type == Arrow_type::ROTATING && d_population[d_scores_indices[indice]].limits[2] >= MAX_ROT_ARROWS));
+
+                            if (tmp.o_type > 1)
+                                d_population[d_scores_indices[indice]].limits[tmp.o_type - 2]++;
+                            tmp.dir = curand(&localState) & 7;
+                            break;
+                        case Object_type::ORB: //orb
+                            // orb can be normal or refresh
+                            tmp.o_type = (d_population[d_scores_indices[indice]].limits[3] < MAX_REFRESH) ? curand(&localState) & 1 : 0;
+                            d_population[d_scores_indices[indice]].limits[3] += (tmp.o_type & 1);
+                            break;
+                        }
+                    }
+                    else {
+                        if (tmp.o_type > 1)
+                            d_population[d_scores_indices[indice]].limits[tmp.o_type - 2]++;
+                    }
+                    break;
+                case Object_type::ORB:
+                    if (tmp.o_type == Orb_type::REFRESH) {
+                        if (d_population[d_scores_indices[indice]].limits[3] >= MAX_REFRESH)
+                        {
+                            char type = curand(&localState) % (REFLECT_UNLOCK ? 3 : 2);
+                            tmp.type = type;
+                            switch (type) {
+                            case Object_type::ARROW: //arrow
+                                // pick an arrow type within grid object limits
+                                do {
+                                    tmp.o_type = curand(&localState) % 5;
+                                } while ((tmp.o_type == Arrow_type::FIVE_USES && d_population[d_scores_indices[indice]].limits[0] == MAX_5T_ARROWS) ||
+                                    (tmp.o_type == Arrow_type::INFINITE_USES && d_population[d_scores_indices[indice]].limits[1] == MAX_INF_ARROWS) ||
+                                    (tmp.o_type == Arrow_type::ROTATING && d_population[d_scores_indices[indice]].limits[2] == MAX_ROT_ARROWS));
+
+                                if (tmp.o_type > 1)
+                                    d_population[d_scores_indices[indice]].limits[tmp.o_type - 2]++;
+                                tmp.dir = curand(&localState) & 7;
+                                break;
+                            case Object_type::ORB: //orb
+                                // orb can be normal or refresh
+                                tmp.o_type = (d_population[d_scores_indices[indice]].limits[3] < MAX_REFRESH) ? curand(&localState) & 1 : 0;
+                                d_population[d_scores_indices[indice]].limits[3] += (tmp.o_type & 1);
+                                break;
+                            }
+                        }
+                        else {
+                            d_population[d_scores_indices[indice]].limits[3]++;
+                        }
+                    }
+                    break;
+                }
+            }
+            d_population[d_scores_indices[indice]].cases[i][j] = tmp;
+        }
+    }
+    d_population[d_scores_indices[indice]].changed = true;
+    state[indice] = localState;
+}
+
+
+__global__ void cuda_mutate(Parameters* d_params, Grid* d_population, curandState* state) {
+    int indice = (blockIdx.x * blockDim.x) + threadIdx.x;
+    if (indice >= d_params->population_size || indice == 0)
+        return;
+
+    curandState localState = state[indice];
+
+    for (int i = 0; i < d_params->min_mutations; ++i) {
+        // pick a random position
+        int x = curand(&localState) % DIM;
+        int y = curand(&localState) % DIM;
+
+        int type;
+
+        // update limits
+        switch (d_population[indice].cases[x][y].type) {
+        case Object_type::ARROW:
+            type = d_population[indice].cases[x][y].o_type;
+            switch (type) {
+            case Arrow_type::FIVE_USES:
+                d_population[indice].limits[0]--;
+                break;
+            case Arrow_type::INFINITE_USES:
+                d_population[indice].limits[1]--;
+                break;
+            case Arrow_type::ROTATING:
+                d_population[indice].limits[2]--;
+                break;
+            }
+            break;
+        case Object_type::ORB:
+            if (d_population[indice].cases[x][y].o_type == Orb_type::REFRESH)
+                d_population[indice].limits[3]--;
+            break;
+        }
+
+        // create new object
+        type = curand(&localState) % (REFLECT_UNLOCK ? 3 : 2);
+        d_population[indice].cases[x][y].type = type;
+        switch (type) {
+        case Object_type::ARROW: //arrow
+            // pick an arrow type within grid object limits
+            do {
+                d_population[indice].cases[x][y].o_type = curand(&localState) % 5;
+            } while ((d_population[indice].cases[x][y].o_type == Arrow_type::FIVE_USES && d_population[indice].limits[0] == MAX_5T_ARROWS) ||
+                (d_population[indice].cases[x][y].o_type == Arrow_type::INFINITE_USES && d_population[indice].limits[1] == MAX_INF_ARROWS) ||
+                (d_population[indice].cases[x][y].o_type == Arrow_type::ROTATING && d_population[indice].limits[2] == MAX_ROT_ARROWS));
+
+            if (d_population[indice].cases[x][y].o_type > 1)
+                d_population[indice].limits[d_population[indice].cases[x][y].o_type - 2]++;
+            d_population[indice].cases[x][y].dir = curand(&localState) & 7;
+            break;
+        case Object_type::ORB: //orb
+            // orb can be normal or refresh
+            d_population[indice].cases[x][y].o_type = (d_population[indice].limits[3] < MAX_REFRESH) ? curand(&localState) & 1 : 0;
+            d_population[indice].limits[3] += (d_population[indice].cases[x][y].o_type & 1);
+            break;
+        }
+        d_population[indice].changed = true;
+    }
+    
+    for (int i = 0; i < d_params->max_mutations-d_params->min_mutations; ++i) {
+        if (curand_uniform(&localState) < d_params->mutation_rate) {
+            // pick a random position
+            int x = curand(&localState) % DIM;
+            int y = curand(&localState) % DIM;
+           
+            int type;
+
+            // update limits
+            switch (d_population[indice].cases[x][y].type) {
+            case Object_type::ARROW:
+                type = d_population[indice].cases[x][y].o_type;
+                switch (type) {
+                case Arrow_type::FIVE_USES:
+                    d_population[indice].limits[0]--;
+                    break;
+                case Arrow_type::INFINITE_USES:
+                    d_population[indice].limits[1]--;
+                    break;
+                case Arrow_type::ROTATING:
+                    d_population[indice].limits[2]--;
+                    break;
+                }
+                break;
+            case Object_type::ORB:
+                if (d_population[indice].cases[x][y].o_type == Orb_type::REFRESH)
+                    d_population[indice].limits[3]--;
+                break;
+            }
+
+            // create new object
+            type = curand(&localState) % (REFLECT_UNLOCK ? 3 : 2);
+            d_population[indice].cases[x][y].type = type;
+            switch (type) {
+            case Object_type::ARROW: //arrow
+                // pick an arrow type within grid object limits
+                do {
+                    d_population[indice].cases[x][y].o_type = curand(&localState) % 5;
+                } while ((d_population[indice].cases[x][y].o_type == Arrow_type::FIVE_USES && d_population[indice].limits[0] == MAX_5T_ARROWS) ||
+                    (d_population[indice].cases[x][y].o_type == Arrow_type::INFINITE_USES && d_population[indice].limits[1] == MAX_INF_ARROWS) ||
+                    (d_population[indice].cases[x][y].o_type == Arrow_type::ROTATING && d_population[indice].limits[2] == MAX_ROT_ARROWS));
+
+                if (d_population[indice].cases[x][y].o_type > 1)
+                    d_population[indice].limits[d_population[indice].cases[x][y].o_type - 2]++;
+                d_population[indice].cases[x][y].dir = curand(&localState) & 7;
+                break;
+            case Object_type::ORB: //orb
+                // orb can be normal or refresh
+                d_population[indice].cases[x][y].o_type = (d_population[indice].limits[3] < MAX_REFRESH) ? curand(&localState) & 1 : 0;
+                d_population[indice].limits[3] += (d_population[indice].cases[x][y].o_type & 1);
+                break;
+            }
+            d_population[indice].changed = true;
+        }
+    }
+    state[indice] = localState;
+}
+
+void quicksortIndices(int population_size, int values[], int indices[]) {
+    for (int i = 0; i < population_size; i++)
+        indices[i] = i;
+    quicksortIndices(population_size, values, indices, 0, population_size - 1);
+}
+
+/**
+ * @brief Sorts the provided values between two indices while applying the same
+ *        transformations to the array of indices
+ *
+ * @param values  the values to sort
+ * @param indices the indices to sort according to the corresponding values
+ * @param         low, high are the **inclusive** bounds of the portion of array
+ *                to sort
+ */
+void quicksortIndices(int population_size, int values[], int indices[], int low, int high) {
+    int l = low;
+    int h = high;
+    int pivot = values[l];
+    while (l <= h) {
+        if (values[l] < pivot)
+            l++;
+        else if (values[h] > pivot)
+            h--;
+        else {
+            swap(l, h, values, indices);
+            l++;
+            h--;
+        }
+    }
+    if (low < h)
+        quicksortIndices(population_size, values, indices, low, h);
+    if (high > l)
+        quicksortIndices(population_size, values, indices, l, high);
+}
+
+/**
+ * @brief Swaps the elements of the given arrays at the provided positions
+ *
+ * @param         i, j the indices of the elements to swap
+ * @param values  the array floats whose values are to be swapped
+ * @param indices the array of ints whose values are to be swapped
+ */
+void swap(int i, int j, int values[], int indices[]) {
+    int tempValue = values[i];
+    int tempIndice = indices[i];
+    values[i] = values[j];
+    indices[i] = indices[j];
+    values[j] = tempValue;
+    indices[j] = tempIndice;
+}
+
+__global__ void setup_kernel(curandState* state, int* d_val) {
+    int id = threadIdx.x + blockIdx.x * blockDim.x;
+    /* Each thread gets same seed, a different sequence
+       number, no offset */
+    curand_init(d_val[id], id, 0, &state[id]);
+}
+
+void setup(curandState* state) {
+    int  *values, *d_values;
+    values = new int[TOTAL_THREADS];
+    cudaMalloc((void**)&d_values, sizeof(int) * TOTAL_THREADS);
+    for (int i = 0; i < TOTAL_THREADS; ++i)
+        values[i] = rand();
+    cudaMemcpy(d_values, values, sizeof(int) * TOTAL_THREADS, cudaMemcpyHostToDevice);
+    setup_kernel<<<BLOCKS, THREADS>>>(state, d_values);
+    cudaFree(d_values);
+    delete values;
+}
+
+void cuda_run(Parameters params, Parameters* d_params, Grid* population, Grid* d_population, 
+    int* scores, int *d_scores, int* scores_indices, int *d_scores_indices, 
+    Grid *fittest, Grid *d_fittest, curandState* state) {
+    
+    // evaluate the population
+    cuda_eval<<<BLOCKS, THREADS>>>(d_params, d_population, d_scores);
     cudaDeviceSynchronize();
-    cudaMemcpy(population, d_population, sizeof(Grid) * population_size, cudaMemcpyDeviceToHost);
+
+    // get back the scores
+    cudaMemcpy(scores, d_scores, sizeof(int) * params.population_size, cudaMemcpyDeviceToHost);
+    for (int i = 0; i < params.population_size; ++i) {
+        scores_indices[i] = i;
+        if (scores[i] == 50000) {
+            cudaMemcpy(fittest, &d_population[i], sizeof(Grid), cudaMemcpyDeviceToHost);
+            std::cout << "ERROR" << std::endl;
+            repr(*fittest);
+        }
+    }
+    quicksortIndices(params.population_size, scores, scores_indices);
+    
+    //save the fittest and his score
+    if (scores[0] < fittest->score) {
+        cudaMemcpy(fittest, &d_population[scores_indices[0]], sizeof(Grid), cudaMemcpyDeviceToHost);
+    }
+
+    cudaMemcpy(d_scores, scores, sizeof(int) * params.population_size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_scores_indices, scores_indices, sizeof(int) * params.population_size, cudaMemcpyHostToDevice);
+
+    // breed new elements
+    cuda_breed<<<BLOCKS, THREADS>>>(d_params, d_population, d_scores, d_scores_indices, state);
+    cudaDeviceSynchronize(); 
+
+    // mutate some elements
+    cuda_mutate<<<BLOCKS, THREADS>>>(d_params, d_population, state);
+    cudaError a = cudaDeviceSynchronize();
+    //cudaMemcpy(population, d_population, sizeof(Grid) * params.population_size, cudaMemcpyDeviceToHost);
 
     //cudaFree(d_population);
-    cudaFree(d_population_size);
+    //cudaFree(d_population_size);
 }
 

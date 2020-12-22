@@ -19,20 +19,7 @@
 #undef max
 #endif // removes the max macro defined in some ide
 
-// DEPRECATED
-// CPU thread management 
-#define USE_THREADS 0
-#define THREAD_COUNT 5
 
-// GAME CONSTANTS
-#define DIM 7
-
-// Simulation parameters, shouldn't change assuming you unlocked everything (3 prestiges)
-#define MAX_5T_ARROWS 4
-#define MAX_ROT_ARROWS 3
-#define MAX_INF_ARROWS 1
-#define MAX_REFRESH 1
-#define REFLECT_UNLOCK 1
 
 
 /* End structures */
@@ -50,9 +37,9 @@ void refresh_individual(Grid& individual);
 int simulate(int population_size, int indice, Grid* population);
 void mutate_individual(int population_size, Grid& individual);
 
-void quicksortIndices(int population_size, int values[], int indices[]);
-void quicksortIndices(int population_size, int values[], int indices[], int low, int high);
-void swap(int i, int j, int values[], int indices[]);
+//void quicksortIndices(int population_size, int values[], int indices[]);
+//void quicksortIndices(int population_size, int values[], int indices[], int low, int high);
+//void swap(int i, int j, int values[], int indices[]);
 void wait_on_enter();
 
 void multi_sim(int population_size, int start, int end, Grid* population, int* scores);
@@ -98,6 +85,7 @@ void create_individual(Grid& individual) {
 void create_object(Case& object, char limits[]) {
     char type = rand() % (REFLECT_UNLOCK ? 3 : 2);
     object.type = type;
+    object.dir = 0;
     switch (type) {
         case Object_type::ARROW: //arrow
             // pick an arrow type within grid object limits
@@ -120,24 +108,12 @@ void create_object(Case& object, char limits[]) {
 }
 
 void evaluate(int population_size, Grid* population, int* scores, int* scores_indices) {
-    std::vector<std::thread> Pool(population_size);
-
-    if (!USE_THREADS) {
-        for (int i = 0; i < population_size; i++) {
-            //repr(population[i]);
-            scores[i] = simulate(population_size, i, population);
-        }
+   
+    for (int i = 0; i < population_size; i++) {
+        //repr(population[i]);
+        scores[i] = simulate(population_size, i, population);
     }
-    else {
-        Pool.clear();
-        for (int i = 0; i < THREAD_COUNT; i++)
-            Pool.push_back(std::thread(multi_sim, population_size, (i * population_size) / THREAD_COUNT, ((i + 1) * population_size) / THREAD_COUNT, population, scores));
-
-        for (int i = 0; i < THREAD_COUNT; i++)
-            Pool[i].join();
-    }
-    /**/
-
+    
 }
 
 
@@ -484,12 +460,12 @@ int simulate(int population_size, int indice, Grid* population)
     return score;
 }
 
-
+/*
 void quicksortIndices(int population_size, int values[], int indices[]) {
     for (int i = 0; i < population_size; i++)
         indices[i] = i;
     quicksortIndices(population_size, values, indices, 0, population_size - 1);
-}
+}*/
 
 /**
  * @brief Sorts the provided values between two indices while applying the same
@@ -499,7 +475,7 @@ void quicksortIndices(int population_size, int values[], int indices[]) {
  * @param indices the indices to sort according to the corresponding values
  * @param         low, high are the **inclusive** bounds of the portion of array
  *                to sort
- */
+ *//*
 void quicksortIndices(int population_size, int values[], int indices[], int low, int high) {
     int l = low;
     int h = high;
@@ -519,7 +495,7 @@ void quicksortIndices(int population_size, int values[], int indices[], int low,
         quicksortIndices(population_size, values, indices, low, h);
     if (high > l)
         quicksortIndices(population_size, values, indices, l, high);
-}
+}*/
 
 /**
  * @brief Swaps the elements of the given arrays at the provided positions
@@ -527,7 +503,7 @@ void quicksortIndices(int population_size, int values[], int indices[], int low,
  * @param         i, j the indices of the elements to swap
  * @param values  the array floats whose values are to be swapped
  * @param indices the array of ints whose values are to be swapped
- */
+ *//*
 void swap(int i, int j, int values[], int indices[]) {
     int tempValue = values[i];
     int tempIndice = indices[i];
@@ -535,7 +511,7 @@ void swap(int i, int j, int values[], int indices[]) {
     indices[i] = indices[j];
     values[j] = tempValue;
     indices[j] = tempIndice;
-}
+}*/
 
 
 /**
@@ -575,10 +551,12 @@ void mutate_individual(int population_size, Grid &individual) {
     individual.changed = true;
 }
 
-void status(int population_size, Grid* population, int iteration, int max_iter, Grid &fittest, int* scores, time_t start, time_t now) {
+void status(int population_size, Grid* population, 
+    int iteration, int max_iter, Grid &fittest, 
+    int* scores, time_t start, time_t now) {
     float avg_score = 0;
     for (int i = 0; i < population_size; ++i)
-        avg_score += population[i].score;
+        avg_score += scores[i];
     avg_score /= (float)population_size;
     system("cls");
     console::gotoxy(0, 0);
@@ -643,17 +621,16 @@ int main(int argc, char* argv)
     Parameters params{};// {100, 50000, 1, 6, .2, .3};//= parse_parameters(argc, argv);
     params.population_size = 1000;
     params.max_iterations = 2000000;
-    params.min_mutations = 1;
-    params.max_mutations = 9;
+    params.min_mutations = 0;
+    params.max_mutations = 6;
     params.retain_rate = .1f;
-    params.mutation_rate = .1f;
+    params.mutation_rate = .3f;
     params.kill_rate = 0.05f;
 
     Grid* population = new Grid[params.population_size];
-    Grid* d_population;
-    cudaMalloc((void**)&d_population, params.population_size * sizeof(Grid));
-    Grid fittest{};
 
+    Grid fittest{};
+    
     Grid bs{};
     bs.cases[0][0] = Case{ 0, 1, 3 };
     bs.cases[1][0] = Case{ 2 };
@@ -721,15 +698,34 @@ int main(int argc, char* argv)
     int *scores = new int[params.population_size];
     int *scores_indices = new int[params.population_size];
 
+    // CUDA device initialization
+    Grid* d_population;
+    Parameters* d_params;
+    int* d_scores;
+    int* d_scores_indices;
+    curandState *c_state;
+    Grid* d_fittest;
+
+
+    cudaMalloc((void**)&d_population, params.population_size * sizeof(Grid));
+    cudaMalloc((void**)&d_params, sizeof(Parameters));
+    cudaMalloc((void**)&d_scores, sizeof(int)* params.population_size);
+    cudaMalloc((void**)&d_scores_indices, sizeof(int)* params.population_size);
+    cudaMalloc((void**)&c_state, sizeof(curandState)* TOTAL_THREADS);
+    cudaMalloc((void**)&d_fittest, sizeof(Grid));
+
     time_t start = time(NULL);
     std::cout << "Seed:" << start << std::endl;
     srand(start);
 
     //initial state
     create_population(params.population_size, population);
+    //copy_tab(population[0], bs);
+    //population[0].changed = true;
 
-    copy_tab(population[0], bs);
-    population[0].changed = true;
+    cudaMemcpy(d_population, population, sizeof(Grid)* params.population_size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_params, &params, sizeof(Parameters), cudaMemcpyHostToDevice);
+    setup(c_state);
     //std::cout << simulate(params.population_size, 0, population);
 
     time_t t = time(NULL);
@@ -737,10 +733,13 @@ int main(int argc, char* argv)
 
     for (int iteration = 0; iteration < params.max_iterations; ++iteration) {
         // evalute the population
-        ce(params.population_size, population, d_population);
+        //setup(c_state);
+        cuda_run(params, d_params, population, d_population,
+            scores, d_scores, scores_indices, d_scores_indices,
+            &fittest, d_fittest, c_state);
 
         // sort         
-        for (int i = 0; i < params.population_size; ++i) {
+        /*for (int i = 0; i < params.population_size; ++i) {
             scores_indices[i] = i;
             scores[i] = population[i].score;
         }
@@ -749,44 +748,44 @@ int main(int argc, char* argv)
         //save the fittest and his score
         if (scores[0] < fittest.score) {
             copy_tab(fittest, population[scores_indices[0]]);
-        }
+        }*/
 
-        for (int i = 0; i < params.population_size; ++i) {
-            //replace with RETAIN_PERCENT
-            if (i > params.retain_rate * params.population_size) {
-                /*if (i > (1 - params.kill_rate) * params.population_size)
-                {
-                    create_individual(population[scores_indices[i]]);
-                }*/
-                //else {
-                //int parent_a, parent_b;
-                //parent_a = scores_indices[rand() % (int)(0.1 * params.retain_rate * params.population_size)];
-                //parent_b = scores_indices[rand() % (int)(0.1 * params.retain_rate * params.population_size)];
-                //breed(params.population_size, scores_indices[i], parent_a, parent_b, population);
-                //}
-                copy_tab(population[scores_indices[i]], population[scores_indices[0]]);
-                population[scores_indices[i]].changed = true;
-            }
-            // mutate
-            // TODO : REWORK
+        //for (int i = 0; i < params.population_size; ++i) {
+        //    //replace with RETAIN_PERCENT
+        //    if (i > params.retain_rate * params.population_size) {
+        //        /*if (i > (1 - params.kill_rate) * params.population_size)
+        //        {
+        //            create_individual(population[scores_indices[i]]);
+        //        }*/
+        //        //else {
+        //        int parent_a, parent_b;
+        //        parent_a = scores_indices[rand() % (int)(params.retain_rate * params.population_size)];
+        //        parent_b = scores_indices[rand() % (int)(params.retain_rate * params.population_size)];
+        //        breed(params.population_size, scores_indices[i], parent_a, parent_b, population);
+        //        //}
+        //        //copy_tab(population[scores_indices[i]], population[scores_indices[0]]);
+        //        //population[scores_indices[i]].changed = true;
+        //    }
+        //    // mutate
+        //    // TODO : REWORK
 
-            // forced mutations
-            if (i > 0) {
-                for (int j = 0; j < params.min_mutations; ++j) {
-                    mutate_individual(params.population_size, population[scores_indices[i]]);
-                    population[scores_indices[i]].changed = true;
-                }
-                for (int j = 0; j < params.max_mutations - params.min_mutations; ++j) {
-                    if (rand() / (float)RAND_MAX < params.mutation_rate) {
-                        mutate_individual(params.population_size, population[scores_indices[i]]);
-                        population[scores_indices[i]].changed = true;
-                    }
-                }
-            }
-        }
+        //    // forced mutations
+        //    if (i > 0) {
+        //        for (int j = 0; j < params.min_mutations; ++j) {
+        //            mutate_individual(params.population_size, population[scores_indices[i]]);
+        //            population[scores_indices[i]].changed = true;
+        //        }
+        //        for (int j = 0; j < params.max_mutations - params.min_mutations; ++j) {
+        //            if (rand() / (float)RAND_MAX < params.mutation_rate) {
+        //                mutate_individual(params.population_size, population[scores_indices[i]]);
+        //                population[scores_indices[i]].changed = true;
+        //            }
+        //        }
+        //    }
+        //}
 
         dt = time(NULL);
-        if (dt-t >= 2) {
+        if (dt - t >= 2) {
             status(params.population_size, population, iteration, params.max_iterations, fittest, scores, start, t);
             t = dt;
             /*if (changed) {
@@ -794,6 +793,13 @@ int main(int argc, char* argv)
                 changed = false;
             }*/
         }
+        //std::cout << "ITER ======================" << iteration << std::endl;
+        /*for (int _ = 0; _ < params.population_size; ++_)
+        {
+            std::cout << _ << std::endl;
+            repr(population[_]);
+            simulate(params.population_size, _, population);
+        }*/
 
 
     }
