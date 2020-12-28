@@ -53,4 +53,6 @@ typedef struct {
     int max_mutations;
     float retain_rate;
     float mutation_rate;
+    int thread_per_block;
+    int blocks;
 } Parameters;

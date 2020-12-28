@@ -24,3 +24,5 @@ void setup(curandState* state, Parameters* d_params);
 void quicksortIndices(int population_size, int values[], int indices[]);
 void quicksortIndices(int population_size, int values[], int indices[], int low, int high);
 void swap(int i, int j, int values[], int indices[]);
+
+int benchmark(Parameters params, int verbose=0);

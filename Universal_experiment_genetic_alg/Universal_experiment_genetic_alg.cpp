@@ -178,6 +178,7 @@ static void show_usage(std::string name)
 
 Parameters parse_parameters(int argc, char* argv[]) {
     Parameters params{-1, -1, -1, -1, -1, -1};
+    boolean benchmark_required = false;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -246,6 +247,19 @@ Parameters parse_parameters(int argc, char* argv[]) {
                 exit(1);
             }
         }
+        else if (arg == "--benchmark") {
+            benchmark_required = true;
+        }
+        else if (arg == "--threads") {
+            if (i + 1 < argc) {
+                stoi(argv[++i], &params.thread_per_block);
+            }
+            else {
+                std::cerr << "--threads option requires one argument." << std::endl;
+                wait_on_enter();
+                exit(1);
+            }
+        }
     }
 
     if (params.population_size < 0) {
@@ -301,6 +315,12 @@ Parameters parse_parameters(int argc, char* argv[]) {
             wait_on_enter();
             exit(-1);
         }
+    }
+    if (benchmark_required)
+    {
+        benchmark(params, 1);
+        wait_on_enter();
+        exit(0);
     }
     return params;
 }
@@ -437,10 +457,11 @@ int main(int argc, char* argv[])
     std::cout << "And please don't try to break something as it WILL break." << std::endl;
     std::cout << "\nSource code available at https://github.com/leoTigers/TP2-Universal-Experiment-GA-solver" << std::endl;
     std::cout << "Feel free to experiment and maybe improve this program / fix the mistakes I made :D" << std::endl;
-    std::cout << "\nThis program can run with parameters, to learn more about symbols and parameters, run with -h" << std::endl;
     
-    if(argc < 2) 
+    if (argc < 2) {
+        std::cout << "\nThis program can run with parameters, to learn more about symbols and parameters, run with -h" << std::endl;
         wait_on_enter();
+    }
 
     // Simulation parameters
     Parameters params{ 0 };
@@ -452,67 +473,69 @@ int main(int argc, char* argv[])
     
     // Best solution found yet (score 526)
     Grid bs{};
-    bs.cases[0][0] = Case{ 0, 1, 3 };
-    bs.cases[1][0] = Case{ 2 };
-    bs.cases[2][0] = Case{ 0, 0, 4 };
-    bs.cases[3][0] = Case{ 0, 2, 5 };
-    bs.cases[4][0] = Case{ 0, 1, 5 };
-    bs.cases[5][0] = Case{ 0, 4, 5 };
-    bs.cases[6][0] = Case{ 0, 2, 5 };
+    {
+        bs.cases[0][0] = Case{ 0, 1, 3 };
+        bs.cases[1][0] = Case{ 2 };
+        bs.cases[2][0] = Case{ 0, 0, 4 };
+        bs.cases[3][0] = Case{ 0, 2, 5 };
+        bs.cases[4][0] = Case{ 0, 1, 5 };
+        bs.cases[5][0] = Case{ 0, 4, 5 };
+        bs.cases[6][0] = Case{ 0, 2, 5 };
 
 
-    bs.cases[0][1] = Case{ 0, 1, 4 };
-    bs.cases[1][1] = Case{ 0, 1, 4 };
-    bs.cases[2][1] = Case{ 0, 1, 4 };
-    bs.cases[3][1] = Case{ 1, 0 };
-    bs.cases[4][1] = Case{ 1, 0 };
-    bs.cases[5][1] = Case{ 0, 2, 6 };
-    bs.cases[6][1] = Case{ 0, 1, 7 };
+        bs.cases[0][1] = Case{ 0, 1, 4 };
+        bs.cases[1][1] = Case{ 0, 1, 4 };
+        bs.cases[2][1] = Case{ 0, 1, 4 };
+        bs.cases[3][1] = Case{ 1, 0 };
+        bs.cases[4][1] = Case{ 1, 0 };
+        bs.cases[5][1] = Case{ 0, 2, 6 };
+        bs.cases[6][1] = Case{ 0, 1, 7 };
 
-    bs.cases[0][2] = Case{ 0, 1, 4 };
-    bs.cases[1][2] = Case{ 0, 2, 3 };
-    bs.cases[2][2] = Case{ 1, 0 };
-    bs.cases[3][2] = Case{ 1, 0 };
-    bs.cases[4][2] = Case{ 1, 0 };
-    bs.cases[5][2] = Case{ 0, 1, 7 };
-    bs.cases[6][2] = Case{ 0, 1, 7 };
+        bs.cases[0][2] = Case{ 0, 1, 4 };
+        bs.cases[1][2] = Case{ 0, 2, 3 };
+        bs.cases[2][2] = Case{ 1, 0 };
+        bs.cases[3][2] = Case{ 1, 0 };
+        bs.cases[4][2] = Case{ 1, 0 };
+        bs.cases[5][2] = Case{ 0, 1, 7 };
+        bs.cases[6][2] = Case{ 0, 1, 7 };
 
-    bs.cases[0][3] = Case{ 0, 1, 3 };
-    bs.cases[1][3] = Case{ 1, 0 };
-    bs.cases[2][3] = Case{ 1, 0 };
-    bs.cases[3][3] = Case{ 1, 0 };
-    bs.cases[4][3] = Case{ 1, 0 };
-    bs.cases[5][3] = Case{ 0, 1, 7 };
-    bs.cases[6][3] = Case{ 0, 0, 0 };
+        bs.cases[0][3] = Case{ 0, 1, 3 };
+        bs.cases[1][3] = Case{ 1, 0 };
+        bs.cases[2][3] = Case{ 1, 0 };
+        bs.cases[3][3] = Case{ 1, 0 };
+        bs.cases[4][3] = Case{ 1, 0 };
+        bs.cases[5][3] = Case{ 0, 1, 7 };
+        bs.cases[6][3] = Case{ 0, 0, 0 };
 
-    bs.cases[0][4] = Case{ 0, 0, 5 };
-    bs.cases[1][4] = Case{ 2 };
-    bs.cases[2][4] = Case{ 1, 0 };
-    bs.cases[3][4] = Case{ 1, 0 };
-    bs.cases[4][4] = Case{ 1, 0 };
-    bs.cases[5][4] = Case{ 1, 0 };
-    bs.cases[6][4] = Case{ 0, 1, 7 };
+        bs.cases[0][4] = Case{ 0, 0, 5 };
+        bs.cases[1][4] = Case{ 2 };
+        bs.cases[2][4] = Case{ 1, 0 };
+        bs.cases[3][4] = Case{ 1, 0 };
+        bs.cases[4][4] = Case{ 1, 0 };
+        bs.cases[5][4] = Case{ 1, 0 };
+        bs.cases[6][4] = Case{ 0, 1, 7 };
 
-    bs.cases[0][5] = Case{ 0, 4, 2 };
-    bs.cases[1][5] = Case{ 1, 0 };
-    bs.cases[2][5] = Case{ 1, 1 };
-    bs.cases[3][5] = Case{ 0, 1, 1 };
-    bs.cases[4][5] = Case{ 0, 1, 1 };
-    bs.cases[5][5] = Case{ 1, 0 };
-    bs.cases[6][5] = Case{ 0, 1, 0 };
+        bs.cases[0][5] = Case{ 0, 4, 2 };
+        bs.cases[1][5] = Case{ 1, 0 };
+        bs.cases[2][5] = Case{ 1, 1 };
+        bs.cases[3][5] = Case{ 0, 1, 1 };
+        bs.cases[4][5] = Case{ 0, 1, 1 };
+        bs.cases[5][5] = Case{ 1, 0 };
+        bs.cases[6][5] = Case{ 0, 1, 0 };
 
-    bs.cases[0][6] = Case{ 0, 3, 2 };
-    bs.cases[1][6] = Case{ 1, 0};
-    bs.cases[2][6] = Case{ 1, 0 };
-    bs.cases[3][6] = Case{ 0, 1, 7 };
-    bs.cases[4][6] = Case{ 0, 1, 7 };
-    bs.cases[5][6] = Case{ 0, 4, 0 };
-    bs.cases[6][6] = Case{ 0, 1, 0 };
+        bs.cases[0][6] = Case{ 0, 3, 2 };
+        bs.cases[1][6] = Case{ 1, 0 };
+        bs.cases[2][6] = Case{ 1, 0 };
+        bs.cases[3][6] = Case{ 0, 1, 7 };
+        bs.cases[4][6] = Case{ 0, 1, 7 };
+        bs.cases[5][6] = Case{ 0, 4, 0 };
+        bs.cases[6][6] = Case{ 0, 1, 0 };
 
-    bs.limits[0] = 4;
-    bs.limits[1] = 1;
-    bs.limits[2] = 3;
-    bs.limits[3] = 1;
+        bs.limits[0] = 4;
+        bs.limits[1] = 1;
+        bs.limits[2] = 3;
+        bs.limits[3] = 1;
+    }
     repr(bs);
 
     int *scores = new int[params.population_size];
