@@ -47,3 +47,19 @@ Symbols: (to see colors, start program with option -h)
         O : refresh orb
 
         R : reflect
+
+White arrows = 1 pass arrows
+
+Orange arrrows = 3 pass arrows
+
+Blue arrrows = 5 pass arrows
+
+Red orb = gravity up/down orb
+
+Purple orb = refresh grid orb
+
+R = reflect
+
+Purple on white background arrow => rotating arrow 
+
+Black on white background arrow  => infinite arrow
