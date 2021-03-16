@@ -26,5 +26,16 @@
     <ClInclude Include="console.h">
       <Filter>Fichiers d%27en-tête</Filter>
     </ClInclude>
+    <ClInclude Include="cuda_compute.cuh">
+      <Filter>Fichiers d%27en-tête</Filter>
+    </ClInclude>
+    <ClInclude Include="structs.h">
+      <Filter>Fichiers d%27en-tête</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CudaCompile Include="cuda_compute.cu">
+      <Filter>Fichiers sources</Filter>
+    </CudaCompile>
   </ItemGroup>
 </Project>

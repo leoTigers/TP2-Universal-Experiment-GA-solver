@@ -21,6 +21,11 @@ namespace console
 	void setVerbose(bool b);
 
 	/**
+	 * \brief Go to the (x, y) pos in the console
+	*/
+	void gotoxy(int x, int y);
+
+	/**
 	 * \brief Chane the color of the console
 	 * \param foreground the color of the foreground
 	 * \param background the color of the background
